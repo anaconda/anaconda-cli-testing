@@ -5,22 +5,12 @@ export class API {
   //   private readonly createReleaseRequest = '/v1/releases/create';
   //   async verifyGetReleaseListHandlerRequestWithSuccessResponse(): Promise<void> {
   //     const response = await getRequest(this.releaseListHandlerRequest);
-  //     expect(response.status()).toBe(200);
-  //     expect(response.statusText()).toBe('OK');
+  //     expect(response.status(), 'Response status is not 200').toBe(200);
+  //     expect(response.statusText(), 'Response text is not OK').toBe('OK');
   //   }
   //   async verifyGetReleaseListHandlerRequestWithValidationError(): Promise<void> {
   //     const response = await getRequest(this.releaseListHandlerRequest);
-  //     expect(response.status()).toBe(422);
-  //     expect(response.statusText()).not.toBe('OK');
-  //   }
-  //   async verifyCreateReleaseHandlerPostRequestWithSuccessResponse(): Promise<void> {
-  //     const response = await postRequest(this.createReleaseRequest);
-  //     expect(response.status()).toBe(201);
-  //     expect(response.statusText()).toBe('OK');
-  //   }
-  //   async verifyCreateReleaseHandlerPostRequestWithvalidationError(): Promise<void> {
-  //     const response = await postRequest(this.createReleaseRequest);
-  //     expect(response.status()).toBe(422);
-  //     expect(response.statusText()).not.toBe('OK');
+  //     expect(response.status(), 'Response status is not 422').toBe(422);
+  //     expect(response.statusText(), 'Response text is OK').not.toBe('OK');
   //   }
 }
