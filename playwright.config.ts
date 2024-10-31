@@ -11,7 +11,9 @@ dotenv.config({ path: '.env' });
 import path from 'path';
 //import os from 'os';
 
-// Default url for all tests to use allowing to run tests against staging/dev.
+//To run against the local environment, set the URL to your local server like 'https://localhost:9002'
+//You can override the BASE_URL by setting the URL environment variable in .env file or passing it as a command line argument.
+
 export const BASE_URL = process.env.URL || 'https://www.saucedemo.com';
 export const STORAGE_STATE_PATH = path.join(__dirname, 'playwright/.auth');
 // const customLoggerPath = require.resolve('@anaconda/playwright-utils/custom-logger');
