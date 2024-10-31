@@ -9,7 +9,7 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 dotenv.config({ path: '.env' });
 import path from 'path';
-import os from 'os';
+//import os from 'os';
 
 // Default url for all tests to use allowing to run tests against staging/dev.
 export const BASE_URL = process.env.URL || 'https://www.saucedemo.com';
@@ -34,7 +34,6 @@ export default defineConfig({
     trace: 'retain-on-failure',
     /* Captures screenshots after each test failure to provide visual context. */
     screenshot: 'only-on-failure',
-    headless: true,
     // testIdAttribute: 'qa-target',
     baseURL: BASE_URL,
     /* Sets extra headers for auth token */
@@ -82,23 +81,6 @@ export default defineConfig({
 
     {
       name: 'chromiumheadless',
-      // dependencies: ['setup'],
-      use: {
-        ...devices['Desktop Chrome'],
-        viewport: { width: 1600, height: 1000 },
-        // storageState: STORAGE_STATE_LOGIN,
-        launchOptions: {
-          args: ['--disable-web-security'],
-          // channel: 'chrome',
-          slowMo: 0,
-          headless: true,
-        },
-      },
-    },
-
-    // Due to different prod setup using a different project
-    {
-      name: 'chromiumProd',
       // dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
@@ -163,14 +145,14 @@ export default defineConfig({
    * If the tests are being run on localhost, this configuration starts a web server.
    * See https://playwright.dev/docs/test-webserver#configuring-a-web-server
    */
-  webServer: {
-    cwd: `${os.homedir()}/repos/ui`, // You can also use the relative path to the UI repo
-    command: 'npm start ui-server', // Start the UI server
-    url: BASE_URL,
-    ignoreHTTPSErrors: true,
-    timeout: 2 * 60 * 1000,
-    reuseExistingServer: true,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  },
+  // webServer: {
+  //   cwd: `${os.homedir()}/repos/ui`, // You can also use the relative path to the UI repo
+  //   command: 'npm start ui-server', // Start the UI server
+  //   url: BASE_URL,
+  //   ignoreHTTPSErrors: true,
+  //   timeout: 2 * 60 * 1000,
+  //   reuseExistingServer: true,
+  //   stdout: 'pipe',
+  //   stderr: 'pipe',
+  // },
 });
