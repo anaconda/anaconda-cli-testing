@@ -1,5 +1,4 @@
-# In This test we will look for .condarc file, if there is any thing else than default channel will be removed
-# and then we will search the packag in conda search and check if the channel is pkgs/main.
+# This test verifies the package search functionality in conda, ensuring it only uses the default channel and that the search results are as expected.
 
 import os
 import sys
@@ -10,65 +9,92 @@ sys.path.insert(0, os.path.abspath(os.path.join(__file__, "..")))
 
 import pytest
 from src.common.cli_utils import capture
+from src.common.defaults import (
+    DEFAULT_CHANNEL,
+    EXPECTED_CHANNEL,
+    SEARCH_PACKAGE,
+    SEARCH_HEADER_PREFIX
+)
+
 
 @pytest.mark.integration
-def test_conda_config_and_search(tmp_path, caplog, monkeypatch,ensureConda):
+def test_conda_config_and_search(tmp_path, caplog, monkeypatch, ensureConda):
     """
-    1) Ensure `conda config --show-sources` only has the default channel.
-       If it contains extra channels, remove them and reset to only 'defaults'.
-    2) Run `conda search flask` and verify every listed line uses the 'pkgs/main' channel.
+    Test conda configuration and package search functionality.
+    
+    1) Ensure conda config only has the default channel
+    2) Search for a package and verify it uses the correct channel
     """
     caplog.set_level("INFO")
+    
+    # Step 1: Ensure only default channel is configured
+    ensure_default_channel_only(caplog)
+    
+    # Step 2: Search package and verify channel
+    verify_package_search_channel()
 
-    # 1a) Show current sources
+
+def ensure_default_channel_only(caplog):
+    """Ensure conda config only contains the default channel."""
+    # Get current configuration
     out, code = capture("conda config --show-sources")
     assert code == 0, f"`conda config --show-sources` failed (exit {code})"
-    text = out.decode(errors="ignore")
-
-    # If any channel other than 'defaults' is present, reset channels
-    # We look for lines under 'channels:' that are not '- defaults'
-    extra = [
+    config_text = out.decode(errors="ignore")
+    
+    # Find any extra channels (non-default)
+    extra_channels = [
         line.strip()
-        for line in text.splitlines()
-        if line.strip().startswith("- ") and line.strip() != "- defaults"
+        for line in config_text.splitlines()
+        if line.strip().startswith("- ") and line.strip() != f"- {DEFAULT_CHANNEL}"
     ]
-    if extra:
-        caplog.info("Removing extra channels: %s", extra)
-        # remove all channels
+    
+    # Reset channels if extras found
+    if extra_channels:
+        caplog.info("Removing extra channels: %s", extra_channels)
+        
+        # Remove all channels and add back only defaults
         _, rc = capture("conda config --remove-key channels")
         assert rc == 0, "Failed to remove existing channels"
-        # add back only defaults
-        _, rc2 = capture("conda config --add channels defaults")
-        assert rc2 == 0, "Failed to add 'defaults' channel"
-
-        # re-run show-sources to confirm
+        
+        _, rc2 = capture(f"conda config --add channels {DEFAULT_CHANNEL}")
+        assert rc2 == 0, f"Failed to add '{DEFAULT_CHANNEL}' channel"
+        
+        # Verify reset worked
         out2, code2 = capture("conda config --show-sources")
         assert code2 == 0
         text2 = out2.decode(errors="ignore")
-        assert "- defaults" in text2 and all(
-            (line.strip() == "- defaults" or not line.strip().startswith("- "))
+        assert f"- {DEFAULT_CHANNEL}" in text2 and all(
+            (line.strip() == f"- {DEFAULT_CHANNEL}" or not line.strip().startswith("- "))
             for line in text2.splitlines()
             if line.strip().startswith("- ")
         ), f"Channels not reset correctly:\n{text2}"
 
-    # 2) Search for flask and check channel column
-    out_search, code_search = capture("conda search flask")
-    assert code_search == 0, f"`conda search flask` failed (exit {code_search})"
+
+def verify_package_search_channel():
+    """Search for package and verify it uses the expected channel."""
+    # Execute search
+    out_search, code_search = capture(f"conda search {SEARCH_PACKAGE}")
+    assert code_search == 0, f"`conda search {SEARCH_PACKAGE}` failed (exit {code_search})"
+    
     lines = out_search.decode(errors="ignore").splitlines()
-
-    # skip header lines until the table starts (look for header marker '# Name')
+    
+    # Find table start
     try:
-        idx = next(i for i, l in enumerate(lines) if l.lower().startswith("# name"))
+        header_idx = next(
+            i for i, line in enumerate(lines) 
+            if line.lower().startswith(SEARCH_HEADER_PREFIX)
+        )
     except StopIteration:
-        pytest.skip("No search results table found for 'conda search flask'")
-
-    table = lines[idx + 1 :]
-    assert table, "No package entries found for 'flask'"
-
-    # Each non-empty data line should have 'pkgs/main' at the end (channel column)
-    for line in table:
-        if not line.strip():
-            continue
+        pytest.skip(f"No search results table found for 'conda search {SEARCH_PACKAGE}'")
+    
+    # Get package entries
+    package_entries = [line for line in lines[header_idx + 1:] if line.strip()]
+    assert package_entries, f"No package entries found for '{SEARCH_PACKAGE}'"
+    
+    # Verify all entries use expected channel
+    for line in package_entries:
         parts = line.split()
-        channel = parts[-1]
-        assert channel == "pkgs/main", f"Expected channel 'pkgs/main', got '{channel}' in line:\n{line}"
+        channel = parts[-1]  # Channel is the last column
+        assert channel == EXPECTED_CHANNEL, (
+            f"Expected channel '{EXPECTED_CHANNEL}', got '{channel}' in line:\n{line}"
+        )

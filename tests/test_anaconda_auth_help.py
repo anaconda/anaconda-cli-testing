@@ -1,10 +1,10 @@
-# In this test we will verify the anaconda auth help command and its expected output.
+# This test verifies the anaconda auth help command output.
 
 import pytest
 from src.common.cli_utils import capture
 
 @pytest.mark.integration
-def testAnacondaAuthHelpContainsExpectedSections():
+def test_anaconda_auth_help_Contains_Expected_Sections():
     """
     Ensure `anaconda auth --help` shows:
       • A usage header

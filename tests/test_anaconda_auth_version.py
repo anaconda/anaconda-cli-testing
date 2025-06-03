@@ -1,29 +1,55 @@
-# In This test, we will verify the `anaconda auth --version` and `-V` commands
+# This test verifies that the Anaconda Auth package is installed and reports the correct version.
 
 import pytest
+import shutil
 from src.common.cli_utils import capture
+from src.common.defaults import (
+    CLI_SUBCOMMAND,
+    VERSION_FLAGS,
+    ANACONDA_AUTH_VERSION,
+)
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "command",
     [
-        "anaconda auth --version",
-        "anaconda auth -V",
+        ("anaconda auth --version", "0.8.5"),
+        ("anaconda auth -V", "0.8.5"),
     ],
-    ids=["longFlag", "shortFlag"]
+    ids=["longflag", "shortflag"]
 )
-def testAnacondaAuthReportsExactVersion(command, ensureConda):
-    """Ensure `anaconda auth --version` and `-V` succeed and report version 0.8.5."""
-    # Run the CLI command and capture its output and exit code
-    outputBytes, exitCode = capture(command)
-    # 1) Command must exit cleanly
-    assert exitCode == 0, (
-        f"{command!r} exited with code {exitCode}\n"
-        f"stdout:\n{outputBytes.decode()}"
+def test_anaconda_auth_reports_exact_version(command, ensureConda):
+    """
+    Ensure `anaconda auth --version` and `-V` succeed and report version 0.8.5.***
+    
+    Args:
+        command (str): The command to execute (--version or -V)
+        expected_version (str): The expected version string -> this is something you may want to consider as part of the input as well
+        ensureConda (fixture): Ensures Conda is properly installed
+    
+    Raises:
+        AssertionError: If version check fails or command execution fails
+    """
+    # Extract command and expected version from parameterized input
+    cmd, expected_version = command
+    
+    # Fail fast if `anaconda` isn't on PATH
+    anaconda_path = shutil.which("anaconda")
+    if not anaconda_path:
+        pytest.fail("`anaconda` binary not in PATH — please install anaconda-cli")
+    
+    # Run and capture
+    output_bytes, exit_code = capture(cmd)
+    
+    # Must exit 0
+    assert exit_code == 0, (
+        f"{cmd!r} exited with code {exit_code}\n"
+        f"stdout:\n{output_bytes.decode()}\n"
+        f"CLI binary: {anaconda_path}"
     )
-
-    # 2) Output should include the exact version string
-    outputText = outputBytes.decode().strip()
-    assert "0.8.5" in outputText, (
-        f"Expected version '0.8.5' in output of {command!r}, but got:\n{outputText}"
+    
+    # Output should include the exact version string
+    output_text = output_bytes.decode().strip()
+    assert ANACONDA_AUTH_VERSION in output_text, (
+        f"Expected version '{ANACONDA_AUTH_VERSION}' in output of {cmd!r}, got:\n{output_text}"
     )
