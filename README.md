@@ -26,8 +26,6 @@ This repository provides end-to-end automation for the Anaconda Hub login flow, 
    pip install -e .
    ```
 
-4. **Environment variables**
-
    Copy `example.env` → `.env` in the project root and fill in:
 
    ```ini

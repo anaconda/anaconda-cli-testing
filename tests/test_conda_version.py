@@ -1,5 +1,8 @@
-# This test verifies the miniconda installation and the `conda info` command.
-
+# tests/test_conda_version.py
+"""
+Test suite for conda version verification.
+Verifies that conda info command works and reports correct version.
+"""
 import re
 import pytest
 from src.common.cli_utils import capture
@@ -23,8 +26,9 @@ def test_conda_info_reports_correct_version(ensureConda):
     out_bytes, exit_code = capture("conda info")
     assert exit_code == 0, f"`conda info` failed: exit code {exit_code}"
     output = out_bytes.decode()
-    
+   
     # Locate and validate the version line
+    version_found = False
     for line in output.splitlines():
         stripped = line.strip()  # remove leading/trailing spaces
         if stripped.lower().startswith("conda version"):
@@ -33,9 +37,10 @@ def test_conda_info_reports_correct_version(ensureConda):
             assert version_part == CONDA_VERSION, (
                 f"Expected conda version '{CONDA_VERSION}', got '{version_part}'"
             )
+            version_found = True
             break
-    else:
-        pytest.fail("Did not find any line starting with 'conda version'")
+    
+    assert version_found, "Did not find any line starting with 'conda version'"
 
 @pytest.mark.integration
 def test_conda_info_shows_active_environment_section(ensureConda):
@@ -46,7 +51,7 @@ def test_conda_info_shows_active_environment_section(ensureConda):
     out_bytes, exit_code = capture("conda info")
     assert exit_code == 0, f"`conda info` failed: exit code {exit_code}"
     output = out_bytes.decode()
-    
+   
     # Check for the active environment section
     assert "active environment" in output.lower(), (
         "Output is missing an 'active environment' section"

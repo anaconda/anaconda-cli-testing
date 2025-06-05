@@ -3,7 +3,10 @@
 PACKAGE_NAME              = "anaconda-auth"     # the conda package name
 CLI_SUBCOMMAND            = "anaconda auth"     # what you actually run on the CLI
 ANACONDA_AUTH_VERSION     = "0.8.5"             # what we expect for --version/-V
-CONDA_VERSION             = "25.5.0"         # conda version to test against
+CONDA_VERSION             = "25.5.0"            # conda version to test against
+
+# ─── Conda Installation ──────────────────────────────────────────────
+LINUX_INSTALLER_URL       = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
 
 # ─── Version flags to verify ──────────────────────────────────────────
 VERSION_FLAGS        = ["--version", "-V"]

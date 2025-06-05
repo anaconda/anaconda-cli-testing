@@ -34,8 +34,7 @@ def ensureConda():
     and prepend its bin to PATH.
     """
     info, code = ensure_conda_installed()
-    if code != 0:
-        pytest.exit(f"❌ Could not install conda: {info.decode()}", 1)
+    assert code == 0, f"❌ Could not install conda: {info.decode()}"
 
     condaBin = Path.home() / "miniconda3" / "bin"
     os.environ["PATH"] = str(condaBin) + os.pathsep + os.environ.get("PATH", "")
@@ -117,7 +116,7 @@ def cli_runner(free_port, pw_open_script, tmp_path):
      • BROWSER set to our pw-open.sh wrapper
      • ANACONDA_OAUTH_CALLBACK_PORT set to free_port
      • ANACONDA_AUTH_API_KEY blanked to force a fresh OAuth flow
-     • HOME pointed at an empty tmp dir so there’s no cached token
+     • HOME pointed at an empty tmp dir so there's no cached token
     Returns (process, port).
     """
     def _run():
