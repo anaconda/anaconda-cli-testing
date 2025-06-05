@@ -1,8 +1,5 @@
-# tests/test_anaconda_auth_version.py
-"""
-Test suite for Anaconda Auth version command verification.
-Tests both long form (--version) and short form (-V) version flags.
-"""
+# This test verified the anaconda auth version with both long and short flags.
+
 import pytest
 import shutil
 from src.common.cli_utils import capture

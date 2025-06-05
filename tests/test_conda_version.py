@@ -1,8 +1,5 @@
-# tests/test_conda_version.py
-"""
-Test suite for conda version verification.
-Verifies that conda info command works and reports correct version.
-"""
+# This test verifies the miniconda installation and the `conda info` command including conda version check.
+
 import re
 import pytest
 from src.common.cli_utils import capture

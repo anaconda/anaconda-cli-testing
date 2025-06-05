@@ -1,7 +1,5 @@
-# tests/test_anaconda_auth_install.py
-"""
-Test to verify that the Anaconda Auth package is installed and reports correct version.
-"""
+# This test verifies that the Anaconda Auth package is installed and reports correct version.
+
 import pytest
 from src.common.cli_utils import capture
 from src.common.defaults import (

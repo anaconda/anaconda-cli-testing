@@ -1,8 +1,5 @@
-# tests/test_conda_config_and_search.py
-"""
-Test suite for conda configuration and package search functionality.
-Verifies conda uses only default channels and search works correctly.
-"""
+# This test verifies the pacakage search functionality in conda, ensuring it uses the expected channel.
+
 import os
 import sys
 from pathlib import Path

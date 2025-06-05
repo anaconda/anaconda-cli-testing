@@ -1,8 +1,5 @@
-# tests/test_anaconda_auth_help.py
-"""
-Test suite for Anaconda Auth help command verification.
-Verifies that help output contains all expected sections and commands.
-"""
+# This test verifies the anaconda auth help command output.
+
 import pytest
 import shutil
 from src.common.cli_utils import capture

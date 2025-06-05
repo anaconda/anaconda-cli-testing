@@ -1,4 +1,3 @@
-# conftest.py
 # Central test configuration and fixtures for Anaconda Hub CLI + Playwright
 
 import os

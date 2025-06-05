@@ -1,4 +1,4 @@
-# tests/test_anaconda_login.py
+# This test verifies the anaconda auth login flow using API, browser, and CLI and verfies the success message after login.
 """
 Test suite for Anaconda Auth login flow verification.
 End-to-end test combining API, browser, and CLI authentication.
