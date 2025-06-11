@@ -2,6 +2,7 @@
 
 import os
 import sys
+import logging
 from pathlib import Path
 import pytest
 from src.common.cli_utils import capture
@@ -11,6 +12,8 @@ from src.common.defaults import (
     SEARCH_PACKAGE,
     SEARCH_HEADER_PREFIX
 )
+
+logger = logging.getLogger(__name__)
 
 @pytest.mark.integration
 def test_conda_config_and_search(tmp_path, caplog, monkeypatch, ensureConda):
@@ -63,7 +66,7 @@ def ensure_default_channel_only(caplog) -> bool:
        
         # Reset channels if extras found
         if extra_channels:
-            caplog.info("Removing extra channels: %s", extra_channels)
+            logger.info("Removing extra channels: %s", extra_channels)
            
             # Remove all channels and add back only defaults
             out_remove, rc = capture("conda config --remove-key channels")
