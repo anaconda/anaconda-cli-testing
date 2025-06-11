@@ -26,14 +26,6 @@ This repository provides end-to-end automation for the Anaconda Hub login flow, 
    pip install -e .
    ```
 
-   Copy `example.env` → `.env` in the project root and fill in:
-
-   ```ini
-   ANACONDA_API_BASE=https://anaconda.com        # no trailing `/app`
-   ANACONDA_UI_BASE=https://anaconda.com/app
-   HUB_EMAIL=testproductionab@yopmail.com
-   HUB_PASSWORD=Test2025
-   ```
 
 ---
 
