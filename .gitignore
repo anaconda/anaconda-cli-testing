@@ -9,3 +9,6 @@ playwright/.auth/
 .DS_Store
 allure*
 dist
+.venv
+__pycache__/
+*.pyc
