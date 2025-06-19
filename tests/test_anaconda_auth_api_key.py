@@ -31,7 +31,7 @@ def test_auth_api_key_command(
     proc, port, clean_home = cli_runner()
     state = _perform_api_authentication(api_request_context, urls, credentials)
     _perform_browser_login(page, api_request_context, state, urls, credentials)
-    _perform_cli_oauth_flow(lambda: (proc, port), page)
+    _perform_cli_oauth_flow(lambda: (proc, port, clean_home), page)
     _verify_login_success(page, urls)
     
     # Use same HOME for api-key command to access saved login token

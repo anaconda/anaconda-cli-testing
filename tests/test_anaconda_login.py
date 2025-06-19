@@ -1,8 +1,5 @@
 # This test verifies the anaconda auth login flow using API, browser, and CLI and verfies the success message after login.
-"""
-Test suite for Anaconda Auth login flow verification.
-End-to-end test combining API, browser, and CLI authentication.
-"""
+
 import re
 import time
 import logging
@@ -63,12 +60,12 @@ def test_anaconda_login_flow(
         _perform_browser_login(page, api_request_context, state, urls, credentials)
         oauth_url = _perform_cli_oauth_flow(cli_runner, page)
         _verify_login_success(page, urls)
-        logger.info("✅ Complete end‐to‐end CLI+browser login flow completed successfully!")
+        logger.info("Complete end‐to‐end CLI+browser login flow completed successfully!")
 
 
 def _perform_api_authentication(api_request_context, urls, credentials):
     """Step 1: Perform API authentication and return state."""
-    logger.info("▶ Step 1: Performing API authentication...")
+    logger.info("Step 1: Performing API authentication...")
     
     auth = api_request_context.post(f"/api/auth/authorize?return_to={urls['ui']}")
     assert auth.ok, f"Authorize failed: {auth.status}"
@@ -79,13 +76,13 @@ def _perform_api_authentication(api_request_context, urls, credentials):
     login = api_request_context.post(f"/api/auth/login/password/{state}", data=credentials)
     assert login.ok, f"Password login failed: {login.status}"
     
-    logger.info("✅ Step 1: API authentication completed.")
+    logger.info("Step 1: API authentication completed.")
     return state
 
 
 def _perform_browser_login(page, api_request_context, state, urls, credentials):
     """Step 2: Complete browser login using API state."""
-    logger.info("▶ Step 2: Performing browser login...")
+    logger.info("Step 2: Performing browser login...")
     
     login = api_request_context.post(f"/api/auth/login/password/{state}", data=credentials)
     redirect_url = login.json().get("redirect")
@@ -95,25 +92,25 @@ def _perform_browser_login(page, api_request_context, state, urls, credentials):
     expect(page.get_by_text(EXPECTED_TEXT["welcome"])).to_be_visible(timeout=PAGE_LOAD_TIMEOUT)
     
     assert page.url.startswith(urls['ui']), f"Expected to be on {urls['ui']}, got {page.url}"
-    logger.info("✅ Step 2: Browser login completed (Welcome Back shown).")
+    logger.info("Step 2: Browser login completed (Welcome Back shown).")
 
 
 def _perform_cli_oauth_flow(cli_runner, page):
     """Step 3: Start CLI process and complete OAuth flow."""
-    logger.info("▶ Step 3: Starting CLI OAuth flow...")
+    logger.info("Step 3: Starting CLI OAuth flow...")
     
-    proc, port = cli_runner()
-    logger.info(f"    → CLI process PID: {proc.pid}, listening on port {port}")
+    proc, port, clean_home = cli_runner()
+    logger.info(f"CLI process PID: {proc.pid}, listening on port {port}")
     
     oauth_url = _capture_oauth_url_from_cli(proc)
-    assert oauth_url, "❌ Failed to capture OAuth URL from CLI"
+    assert oauth_url, "Failed to capture OAuth URL from CLI"
     
-    logger.info("    → Navigating to OAuth URL in browser...")
+    logger.info("Navigating to OAuth URL in browser...")
     page.goto(oauth_url, timeout=PAGE_LOAD_TIMEOUT)
     page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
     
     _wait_for_cli_completion(proc)
-    logger.info("✅ Step 3: CLI OAuth flow completed.")
+    logger.info("Step 3: CLI OAuth flow completed.")
     return oauth_url
 
 
@@ -136,7 +133,7 @@ def _capture_oauth_url_from_cli(proc):
         for u in matches:
             if URL_PATTERNS["oauth"] in u:
                 oauth_url = u
-                logger.info(f"🎯 Captured OAuth URL: {oauth_url}")
+                logger.info(f"Captured OAuth URL: {oauth_url}")
                 break
         if oauth_url:
             break
@@ -145,34 +142,34 @@ def _capture_oauth_url_from_cli(proc):
 
 def _wait_for_cli_completion(proc):
     """Wait for CLI process to exit gracefully."""
-    logger.info("    → Waiting for CLI to exit...")
+    logger.info("Waiting for CLI to exit...")
     start_time, cli_exited = time.time(), False
     
     while time.time() - start_time < CLI_COMPLETION_TIME:
         if proc.poll() is not None:
             cli_exited = True
-            logger.info(f"    → CLI exited with code {proc.returncode}")
+            logger.info(f"CLI exited with code {proc.returncode}")
             break
         time.sleep(0.1)  # Slightly longer sleep to reduce CPU usage
     
     if not cli_exited:
-        logger.info("    → CLI didn't exit naturally, attempting graceful termination...")
+        logger.info("CLI didn't exit naturally, attempting graceful termination...")
         try:
             # Try graceful termination first
             proc.terminate()
             proc.wait(timeout=3)
-            logger.info("    → CLI terminated gracefully")
+            logger.info("CLI terminated gracefully")
         except subprocess.TimeoutExpired:
             # Force kill if graceful termination fails
-            logger.warning("    → CLI didn't respond to termination, force killing...")
+            logger.warning("CLI didn't respond to termination, force killing...")
             proc.kill()
             proc.wait(timeout=2)
-            logger.warning("   ⚠️ CLI force killed")
+            logger.warning("CLI force killed")
 
 
 def _verify_login_success(page, urls):
     """Step 4: Verify successful login on success page."""
-    logger.info("▶ Step 4: Verifying login success...")
+    logger.info("Step 4: Verifying login success...")
     
     success_url = f"{urls['ui']}{URL_PATTERNS['success']}"
     page.goto(success_url, timeout=PAGE_LOAD_TIMEOUT)
@@ -182,4 +179,4 @@ def _verify_login_success(page, urls):
     expect(page.get_by_text(EXPECTED_TEXT["success"])).to_be_visible(timeout=PAGE_LOAD_TIMEOUT)
     
     page.context.close()
-    logger.info("✅ Step 4: Success verification completed.")
+    logger.info("Step 4: Success verification completed.")
