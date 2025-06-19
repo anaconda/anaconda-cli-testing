@@ -116,7 +116,7 @@ def cli_runner(free_port, pw_open_script, tmp_path):
      • ANACONDA_OAUTH_CALLBACK_PORT set to free_port
      • ANACONDA_AUTH_API_KEY blanked to force a fresh OAuth flow
      • HOME pointed at an empty tmp dir so there's no cached token
-    Returns (process, port).
+    Returns (process, port, clean_home).
     """
     def _run():
         clean_home = tmp_path / "clean_home"
@@ -146,6 +146,29 @@ def cli_runner(free_port, pw_open_script, tmp_path):
             stderr=subprocess.STDOUT,
             text=True,
         )
-        return proc, free_port
+        return proc, free_port, str(clean_home)
 
+    return _run
+
+
+# ─── 10) run_cli_command fixture (supports extra_env) ──────────
+@pytest.fixture
+def run_cli_command():
+    """
+    Execute CLI commands with optional environment variable overrides.
+    """
+    def _run(command: str, timeout: int = 30, extra_env: dict = None):
+        env = os.environ.copy()
+        if extra_env:
+            env.update(extra_env)
+        
+        return subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env
+        )
+    
     return _run
