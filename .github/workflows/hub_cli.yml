@@ -41,7 +41,7 @@ jobs:
           sudo apt-get install -y xvfb
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest-playwright
+          pip install pytest pytest-playwright
 
       - name: Install Playwright and dependencies
         run: playwright install chromium --with-deps
@@ -59,7 +59,7 @@ jobs:
           HUB_EMAIL=${EMAIL}
           HUB_PASSWORD=${PASSWORD}
           ENVFILE
-          echo ".env created with $(grep -c '=' tests/.env) vars"
+          echo "✅ .env created with $(grep -c '=' tests/.env) vars"
 
       - name: Setup Miniconda and Anaconda Client
         run: |
@@ -69,22 +69,16 @@ jobs:
           export PATH="$HOME/miniconda3/bin:$PATH"
           conda install -y anaconda-client
 
-      - name: Run All CLI + Auth Tests
+      - name: Run All CLI/Auth Tests (19+ files)
         run: |
-          echo "🔍 Listing all test files:"
-          ls tests/test_*.py
-
-          echo "🔍 Counting all test functions:"
-          pytest --collect-only tests/ | grep "::" | wc -l
-
           xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' \
-          pytest tests/ \
-            --browser=chromium \
-            -v \
-            --tb=short \
-            --junit-xml=test-results/junit.xml
+            pytest tests/ \
+              --browser=chromium \
+              -v \
+              --tb=short \
+              --junit-xml=test-results/junit.xml
 
-      - name: Upload Test Results
+      - name: Upload Test Results on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
