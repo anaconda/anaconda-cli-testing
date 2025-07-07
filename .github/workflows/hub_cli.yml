@@ -1,6 +1,9 @@
 name: Hub_CLI Auth Tests
 
 on:
+  push:
+    branches:
+      - AF-926
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened]
