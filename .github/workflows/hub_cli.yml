@@ -2,15 +2,15 @@ name: Hub_CLI Auth Tests
 
 on:
   workflow_dispatch:
-  #pull_request:
-    #types: [opened, synchronize, reopened]
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   auth-tests:
     runs-on: self-hosted-default
+    timeout-minutes: 30
     
     steps:
-      # Import secrets from Vault
       - name: Import Secrets from Vault
         id: import-secrets
         uses: hashicorp/vault-action@v3.0.0
@@ -46,12 +46,12 @@ jobs:
       
       - name: Create .env file
         run: |
-          cat > tests/.env << EOF
-          ANACONDA_API_BASE=${{ env.ANACONDA_API_BASE }}
-          ANACONDA_UI_BASE=${{ env.ANACONDA_UI_BASE }}
-          HUB_EMAIL=${{ env.HUB_EMAIL }}
-          HUB_PASSWORD=${{ env.HUB_PASSWORD }}
-          EOF
+          touch tests/.env
+          echo "ANACONDA_API_BASE=${{ env.ANACONDA_API_BASE }}" >> tests/.env
+          echo "ANACONDA_UI_BASE=${{ env.ANACONDA_UI_BASE }}" >> tests/.env
+          echo "HUB_EMAIL=${{ env.HUB_EMAIL }}" >> tests/.env
+          echo "HUB_PASSWORD=${{ env.HUB_PASSWORD }}" >> tests/.env
+          echo "Created .env file with $(wc -l < tests/.env) variables"
       
       - name: Setup Miniconda and Anaconda Client
         run: |
@@ -61,44 +61,24 @@ jobs:
           conda install -y anaconda-client
           echo "$HOME/miniconda3/bin" >> $GITHUB_PATH
       
-      - name: Run Auth Tests
+      - name: Run Auth and Token Tests
         run: |
-          echo "Running authentication tests..." >> $GITHUB_STEP_SUMMARY
-          pytest tests/test_anaconda_auth*.py \
+          pytest tests/test_anaconda_auth*.py tests/test_anaconda_token*.py \
             --browser=chromium \
             -v \
             --tb=short \
             --junit-xml=test-results/junit.xml
       
+      - name: Upload Test Results
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: test-results/
+      
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          files: |
-            test-results/junit.xml
+          files: test-results/junit.xml
           check_name: Auth Test Results
-          comment_mode: always
-      
-      - name: Comment PR on Success
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.name,
-              body: '✅ All authentication tests passed! [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
-            })
-      
-      - name: Comment PR on Failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.name,
-              body: '❌ Some tests failed. [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})'
-            })
