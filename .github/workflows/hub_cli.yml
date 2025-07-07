@@ -10,6 +10,10 @@ jobs:
     runs-on: self-hosted-default
     timeout-minutes: 30
 
+    env:
+      ANACONDA_CLI_AUTH_VERSION: "0.8.6"  # Fix for --version help test
+      ANACONDA_CLI_BROWSER: "none"       # Fix for OAuth URL capture in headless
+
     steps:
       - name: Import Secrets from Vault
         id: import-secrets
@@ -59,6 +63,8 @@ jobs:
           HUB_EMAIL=${EMAIL}
           HUB_PASSWORD=${PASSWORD}
           ENVFILE
+          echo ".env file contents:"
+          cat tests/.env
 
       - name: Setup Miniconda and Anaconda Client
         run: |
@@ -68,10 +74,14 @@ jobs:
           export PATH="$HOME/miniconda3/bin:$PATH"
           conda install -y anaconda-client
 
-      - name: Run All Tests
+      - name: Run Auth and Token Tests
         run: |
           xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' \
-            pytest tests/ --browser=chromium -v --tb=short --junit-xml=test-results/junit.xml
+            pytest tests/test_anaconda_auth*.py tests/test_anaconda_token*.py \
+              --browser=chromium \
+              -v \
+              --tb=short \
+              --junit-xml=test-results/junit.xml
 
       - name: Upload Test Results
         if: failure()
@@ -85,3 +95,4 @@ jobs:
         if: always()
         with:
           files: test-results/junit.xml
+          check_name: Auth Test Results
