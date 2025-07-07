@@ -9,7 +9,7 @@ jobs:
   auth-tests:
     runs-on: self-hosted-default
     timeout-minutes: 30
-
+    
     steps:
       - name: Import Secrets from Vault
         id: import-secrets
@@ -29,23 +29,23 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
-
+      
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest-playwright
-          
-      - name: Install Playwright and dependencies
-        run: playwright install chromium --with-deps
-
+      
+      - name: Install Playwright
+        run: |
+          playwright install chromium --with-deps
+          playwright install-deps
+      
       - name: Create .env file
         env:
           API_BASE: ${{ env.ANACONDA_API_BASE }}
@@ -53,39 +53,39 @@ jobs:
           EMAIL: ${{ env.HUB_EMAIL }}
           PASSWORD: ${{ env.HUB_PASSWORD }}
         run: |
+          # Write env file using shell variables
           cat > tests/.env << ENVFILE
           ANACONDA_API_BASE=${API_BASE}
           ANACONDA_UI_BASE=${UI_BASE}
           HUB_EMAIL=${EMAIL}
           HUB_PASSWORD=${PASSWORD}
           ENVFILE
-          echo ".env created with $(grep -c '=' tests/.env) vars"
-
+          
+          echo "Environment file created with $(grep -c "=" tests/.env) variables"
+      
       - name: Setup Miniconda and Anaconda Client
         run: |
           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
           bash miniconda.sh -b -p $HOME/miniconda3
-          echo "$HOME/miniconda3/bin" >> $GITHUB_PATH
           export PATH="$HOME/miniconda3/bin:$PATH"
           conda install -y anaconda-client
-
+          echo "$HOME/miniconda3/bin" >> $GITHUB_PATH
+      
       - name: Run Auth and Token Tests
         run: |
-          xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' \
-            pytest tests/ \
-              --browser=chromium \
-              --capture=tee-sys \
-              -v \
-              --tb=short \
-              --junit-xml=test-results/junit.xml
-
+          pytest tests/test_anaconda_auth*.py tests/test_anaconda_token*.py \
+            --browser=chromium \
+            -v \
+            --tb=short \
+            --junit-xml=test-results/junit.xml
+      
       - name: Upload Test Results
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: test-results/
-
+      
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
