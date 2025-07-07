@@ -35,19 +35,16 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest-playwright
 
-      - name: Install Playwright Browsers
+      - name: Install Playwright and dependencies
         run: playwright install chromium --with-deps
-
-      - name: Install system dependencies (xvfb)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
 
       - name: Create .env file
         env:
@@ -62,32 +59,39 @@ jobs:
           HUB_EMAIL=${EMAIL}
           HUB_PASSWORD=${PASSWORD}
           ENVFILE
-          echo ".env file created with $(grep -c "=" tests/.env) variables"
+          echo ".env created with $(grep -c '=' tests/.env) vars"
 
-      - name: Setup Miniconda and Anaconda CLI
+      - name: Setup Miniconda and Anaconda Client
         run: |
           wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
           bash miniconda.sh -b -p $HOME/miniconda3
           echo "$HOME/miniconda3/bin" >> $GITHUB_PATH
           export PATH="$HOME/miniconda3/bin:$PATH"
-          conda install -y anaconda-client anaconda-auth
+          conda install -y anaconda-client
 
-      - name: Run Auth + Token Tests (Chromium with xvfb)
+      - name: Run All CLI + Auth Tests
         run: |
-          xvfb-run -a pytest tests/test_anaconda_auth*.py tests/test_anaconda_token*.py \
+          echo "🔍 Listing all test files:"
+          ls tests/test_*.py
+
+          echo "🔍 Counting all test functions:"
+          pytest --collect-only tests/ | grep "::" | wc -l
+
+          xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' \
+          pytest tests/ \
             --browser=chromium \
             -v \
             --tb=short \
             --junit-xml=test-results/junit.xml
 
-      - name: Upload Test Results if Failed
+      - name: Upload Test Results
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: test-results/
 
-      - name: Publish Test Results (Always)
+      - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
