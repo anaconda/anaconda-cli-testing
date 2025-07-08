@@ -6,7 +6,7 @@ on:
 jobs:
   auth-tests:
     runs-on: self-hosted-default
-
+    
     steps:
       - name: Import Secrets from Vault
         id: import-secrets
@@ -27,51 +27,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: '3.12'
           auto-update-conda: true
-          activate-environment: 'test-env'
+          activate-environment: test-env
           channels: conda-forge,anaconda,defaults
           conda-remove-defaults: false
 
-      - name: Create and Activate Conda Environment
+      - name: Install dependencies and setup environment
+        shell: bash -el {0}
         run: |
-          source "$CONDA/etc/profile.d/conda.sh"
-          conda create -n test-env python=3.12 -y || echo "Already created"
-          conda activate test-env
-
-      - name: Install Anaconda Auth 0.8.6
-        run: |
-          source "$CONDA/etc/profile.d/conda.sh"
-          conda activate test-env
-          pip install --upgrade anaconda-auth==0.8.6
-          echo "Verifying version:"
-          anaconda auth --version || echo "Version check failed"
-          anaconda auth --help || echo "Help check failed"
-
-      - name: Install system dependencies for headless browser
-        run: |
+          # Install anaconda-auth via conda
+          conda install -y anaconda-auth
+          
+          # Verify installation
+          echo "Verifying anaconda-auth installation:"
+          anaconda auth --version
+          anaconda auth --help
+          
+          # Install system dependencies for headless browser
           sudo apt-get update
           sudo apt-get install -y xvfb
-
-      - name: Install Python dependencies in conda environment
-        run: |
-          source "$CONDA/etc/profile.d/conda.sh"
-          conda activate test-env
-          conda install -y pip
+          
+          # Install Python dependencies
           pip install -r requirements.txt
           pip install pytest-playwright
           playwright install chromium --with-deps
 
       - name: Create .env file
         run: |
+          mkdir -p tests
           cat > tests/.env << EOF
           ANACONDA_API_BASE=${{ env.ANACONDA_API_BASE }}
           ANACONDA_UI_BASE=${{ env.ANACONDA_UI_BASE }}
@@ -79,23 +66,21 @@ jobs:
           HUB_PASSWORD=${{ env.HUB_PASSWORD }}
           EOF
 
-      - name: Setup test environment and directories
+      - name: Setup test directories
         run: |
           mkdir -p test-results/videos
-          mkdir -p test-results
 
       - name: Run Auth Tests
+        shell: bash -el {0}
         continue-on-error: true
         run: |
-          source "$CONDA/etc/profile.d/conda.sh"
-          conda activate test-env
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             python -m pytest tests/ \
-              -v \
-              --tb=short \
-              --junit-xml=test-results/junit.xml \
-              --junit-prefix=auth \
-              --html=test-results/report.html
+            -v \
+            --tb=short \
+            --junit-xml=test-results/junit.xml \
+            --junit-prefix=auth \
+            --html=test-results/report.html
         env:
           PLAYWRIGHT_HEADLESS: "true"
           DISPLAY: ":99"
