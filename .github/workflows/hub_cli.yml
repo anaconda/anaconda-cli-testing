@@ -45,7 +45,15 @@ jobs:
           # Verify installation
           echo "Verifying anaconda-auth installation:"
           anaconda auth --version
-          anaconda auth --help
+          echo "Testing basic auth commands:"
+          
+          # Test help output without colors to see format
+          NO_COLOR=1 anaconda auth --help
+          
+          # Configure conda defaults channel
+          conda config --set channels defaults
+          conda config --show channels
+          conda info
           
           # Install system dependencies for headless browser
           sudo apt-get update
@@ -84,6 +92,8 @@ jobs:
         env:
           PLAYWRIGHT_HEADLESS: "true"
           DISPLAY: ":99"
+          NO_COLOR: "1"
+          TERM: "dumb"
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
