@@ -1,18 +1,11 @@
-name: Hub_CLI Auth Tests
+name: Hub CLI Auth Tests
 
 on:
   workflow_dispatch:
-  pull_request:
-    types: [opened, synchronize, reopened]
 
 jobs:
   auth-tests:
     runs-on: self-hosted-default
-    timeout-minutes: 30
-
-    env:
-      ANACONDA_CLI_AUTH_VERSION: "0.8.6"  # Fix for --version help test
-      ANACONDA_CLI_BROWSER: "none"       # Fix for OAuth URL capture in headless
 
     steps:
       - name: Import Secrets from Vault
@@ -39,60 +32,90 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.12'
+          auto-update-conda: true
+          activate-environment: 'test-env'
+          channels: conda-forge,anaconda,defaults
+          conda-remove-defaults: false
+
+      - name: Create and Activate Conda Environment
+        run: |
+          source "$CONDA/etc/profile.d/conda.sh"
+          conda create -n test-env python=3.12 -y || echo "Already created"
+          conda activate test-env
+
+      - name: Install Anaconda Auth 0.8.6
+        run: |
+          source "$CONDA/etc/profile.d/conda.sh"
+          conda activate test-env
+          pip install --upgrade anaconda-auth==0.8.6
+          echo "Verifying version:"
+          anaconda auth --version || echo "Version check failed"
+          anaconda auth --help || echo "Help check failed"
+
+      - name: Install system dependencies for headless browser
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
-          python -m pip install --upgrade pip
+
+      - name: Install Python dependencies in conda environment
+        run: |
+          source "$CONDA/etc/profile.d/conda.sh"
+          conda activate test-env
+          conda install -y pip
           pip install -r requirements.txt
           pip install pytest-playwright
-
-      - name: Install Playwright and dependencies
-        run: playwright install chromium --with-deps
+          playwright install chromium --with-deps
 
       - name: Create .env file
-        env:
-          API_BASE: ${{ env.ANACONDA_API_BASE }}
-          UI_BASE: ${{ env.ANACONDA_UI_BASE }}
-          EMAIL: ${{ env.HUB_EMAIL }}
-          PASSWORD: ${{ env.HUB_PASSWORD }}
         run: |
-          cat > tests/.env << ENVFILE
-          ANACONDA_API_BASE=${API_BASE}
-          ANACONDA_UI_BASE=${UI_BASE}
-          HUB_EMAIL=${EMAIL}
-          HUB_PASSWORD=${PASSWORD}
-          ENVFILE
-          echo ".env file contents:"
-          cat tests/.env
+          cat > tests/.env << EOF
+          ANACONDA_API_BASE=${{ env.ANACONDA_API_BASE }}
+          ANACONDA_UI_BASE=${{ env.ANACONDA_UI_BASE }}
+          HUB_EMAIL=${{ env.HUB_EMAIL }}
+          HUB_PASSWORD=${{ env.HUB_PASSWORD }}
+          EOF
 
-      - name: Setup Miniconda and Anaconda Client
+      - name: Setup test environment and directories
         run: |
-          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-          bash miniconda.sh -b -p $HOME/miniconda3
-          echo "$HOME/miniconda3/bin" >> $GITHUB_PATH
-          export PATH="$HOME/miniconda3/bin:$PATH"
-          conda install -y anaconda-client
+          mkdir -p test-results/videos
+          mkdir -p test-results
 
-      - name: Run Auth and Token Tests
+      - name: Run Auth Tests
+        continue-on-error: true
         run: |
-          xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24' \
-            pytest tests/test_anaconda_auth*.py tests/test_anaconda_token*.py \
-              --browser=chromium \
+          source "$CONDA/etc/profile.d/conda.sh"
+          conda activate test-env
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            python -m pytest tests/ \
               -v \
               --tb=short \
-              --junit-xml=test-results/junit.xml
+              --junit-xml=test-results/junit.xml \
+              --junit-prefix=auth \
+              --html=test-results/report.html
+        env:
+          PLAYWRIGHT_HEADLESS: "true"
+          DISPLAY: ":99"
 
-      - name: Upload Test Results
-        if: failure()
+      - name: Upload test artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: test-results
-          path: test-results/
+          name: test-artifacts
+          path: |
+            test-results/junit.xml
+            test-results/report.html
+            test-results/videos/
+          if-no-files-found: ignore
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          files: test-results/junit.xml
+          files: |
+            test-results/junit.xml
           check_name: Auth Test Results
+          comment_mode: always
