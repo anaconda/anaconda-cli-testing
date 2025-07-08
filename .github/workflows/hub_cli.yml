@@ -57,7 +57,11 @@ jobs:
           python -c "import conda; print('Conda module found')"
           
           # Configure conda - ensure clean channel setup
-          conda config --remove-key channels || true
+          # Remove all possible conda configs to start fresh
+          rm -f ~/.condarc
+          rm -f ~/.local/conda/.condarc
+          
+          # Set only defaults channel in a clean way
           conda config --add channels defaults
           conda config --set channel_priority strict
           
@@ -95,6 +99,17 @@ jobs:
         run: |
           mkdir -p test-results/videos
 
+      - name: Debug conda configuration before tests
+        shell: bash -el {0}
+        run: |
+          echo "=== CONDA CONFIGURATION DEBUG ==="
+          conda config --show-sources
+          echo "--- Channels ---"
+          conda config --show channels
+          echo "--- All config ---"
+          conda config --show
+          echo "=== END DEBUG ==="
+
       - name: Run Auth Tests
         shell: bash -el {0}
         continue-on-error: true
@@ -111,6 +126,7 @@ jobs:
           DISPLAY: ":99"
           NO_COLOR: "1"
           TERM: "dumb"
+          PYTHONUNBUFFERED: "1"
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
