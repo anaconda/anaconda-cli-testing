@@ -50,9 +50,9 @@ jobs:
           # Test help output without colors to see format
           NO_COLOR=1 anaconda auth --help
           
-          # Configure conda defaults channel
-          conda config --set channels defaults
-          conda config --show channels
+          # Configure conda - fix for channels
+          conda config --add channels defaults
+          conda config --show
           conda info
           
           # Install system dependencies for headless browser
