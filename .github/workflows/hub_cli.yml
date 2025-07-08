@@ -39,39 +39,20 @@ jobs:
       - name: Install dependencies and setup environment
         shell: bash -el {0}
         run: |
-          # Install anaconda-auth via conda
-          conda install -y anaconda-auth
-          
-          # Also install conda-build which may be needed
-          conda install -y conda-build
+          # Install anaconda-auth and conda-build via conda
+          conda install -y anaconda-auth conda-build
           
           # Verify installation
-          echo "Verifying anaconda-auth installation:"
           anaconda auth --version
-          echo "Testing basic auth commands:"
           
-          # Test help output without colors to see format
-          NO_COLOR=1 anaconda auth --help
-          
-          # Verify conda is accessible from Python
+          # Verify conda module is accessible
           python -c "import conda; print('Conda module found')"
           
           # Configure conda - ensure clean channel setup
-          # Remove all possible conda configs to start fresh
           rm -f ~/.condarc
           rm -f ~/.local/conda/.condarc
-          
-          # Set only defaults channel in a clean way
           conda config --add channels defaults
           conda config --set channel_priority strict
-          
-          # Debug: Show final conda config for the test
-          echo "=== Final conda configuration ==="
-          conda config --show-sources
-          conda config --show channels
-          echo "=== End conda configuration ==="
-          
-          conda info
           
           # Install system dependencies for headless browser
           sudo apt-get update
@@ -81,9 +62,6 @@ jobs:
           pip install -r requirements.txt
           pip install pytest-playwright pytest-html
           playwright install chromium --with-deps
-          
-          # Verify playwright installation
-          playwright --version
 
       - name: Create .env file
         run: |
@@ -98,17 +76,6 @@ jobs:
       - name: Setup test directories
         run: |
           mkdir -p test-results/videos
-
-      - name: Debug conda configuration before tests
-        shell: bash -el {0}
-        run: |
-          echo "=== CONDA CONFIGURATION DEBUG ==="
-          conda config --show-sources
-          echo "--- Channels ---"
-          conda config --show channels
-          echo "--- All config ---"
-          conda config --show
-          echo "=== END DEBUG ==="
 
       - name: Run Auth Tests
         shell: bash -el {0}
