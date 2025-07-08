@@ -81,6 +81,8 @@ jobs:
         shell: bash -el {0}
         continue-on-error: true
         run: |
+          # Add small delay to ensure clean process state
+          sleep 2
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             python -m pytest tests/ \
             -v \
@@ -94,6 +96,9 @@ jobs:
           NO_COLOR: "1"
           TERM: "dumb"
           PYTHONUNBUFFERED: "1"
+          PYTHONIOENCODING: "utf-8"
+          # Add timeout settings to prevent hanging processes
+          PYTEST_TIMEOUT: "300"
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
