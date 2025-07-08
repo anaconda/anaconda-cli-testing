@@ -50,8 +50,10 @@ jobs:
           # Test help output without colors to see format
           NO_COLOR=1 anaconda auth --help
           
-          # Configure conda - fix for channels
+          # Configure conda - ensure clean channel setup
+          conda config --remove-key channels || true
           conda config --add channels defaults
+          conda config --set channel_priority strict
           conda config --show
           conda info
           
@@ -63,6 +65,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest-playwright pytest-html
           playwright install chromium --with-deps
+          
+          # Verify playwright installation
+          playwright --version
 
       - name: Create .env file
         run: |
