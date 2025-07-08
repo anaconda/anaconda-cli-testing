@@ -60,7 +60,13 @@ jobs:
           conda config --remove-key channels || true
           conda config --add channels defaults
           conda config --set channel_priority strict
-          conda config --show
+          
+          # Debug: Show final conda config for the test
+          echo "=== Final conda configuration ==="
+          conda config --show-sources
+          conda config --show channels
+          echo "=== End conda configuration ==="
+          
           conda info
           
           # Install system dependencies for headless browser
