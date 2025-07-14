@@ -1,4 +1,4 @@
-# tests/test_anaconda_token_install.py
+# This test verifies that 'anaconda token install' with organization flag:
 
 import os
 import re
@@ -32,10 +32,11 @@ def test_anaconda_token_install_with_oauth(
     4. Responds 'y' to configure .condarc prompt
     5. Verifies conda search shows packages from repo/main channel
     """
+
     logger.info("Starting anaconda token install test...")
 
+    # Setup: isolate environment with clean $HOME and test-specific browser settings
     _, _, clean_home = cli_runner()
-
     env = os.environ.copy()
     env["HOME"] = str(clean_home)
     env["PATH"] = f"{Path.home()}/miniconda3/bin:{env.get('PATH', '')}"
@@ -44,6 +45,7 @@ def test_anaconda_token_install_with_oauth(
 
     logger.info("\nRunning anaconda token install --org us-conversion...")
 
+    # Launch the CLI process with input/output pipes
     token_proc = subprocess.Popen(
         ["anaconda", "token", "install", "--org", "us-conversion"],
         stdin=subprocess.PIPE,
@@ -54,10 +56,12 @@ def test_anaconda_token_install_with_oauth(
         bufsize=0
     )
 
+    # Track command output and state transitions
     output_lines = []
     state = {"oauth": False, "reissue": False, "condarc": False, "success": False}
     start_time = time.time()
 
+    # Read CLI output and respond to prompts
     while time.time() - start_time < 120:
         if token_proc.stdout:
             line = token_proc.stdout.readline().strip()
@@ -65,13 +69,14 @@ def test_anaconda_token_install_with_oauth(
                 output_lines.append(line)
                 logger.info(f"[STDOUT] {line}")
 
+                # Step 2: Detect OAuth URL and perform login
                 if not state["oauth"] and "https://auth.anaconda.com" in line:
                     oauth_url = re.search(r'https://[^\s]+', line).group(0)
                     logger.info(f"Found OAuth URL: {oauth_url}")
 
+                    # Simulate browser navigation and login via API
                     page.goto(oauth_url)
                     page.wait_for_load_state("networkidle")
-
                     url_state = urllib.parse.parse_qs(
                         urllib.parse.urlparse(oauth_url).query
                     ).get("state", [""])[0]
@@ -86,9 +91,9 @@ def test_anaconda_token_install_with_oauth(
                             page.wait_for_load_state("networkidle")
                             state["oauth"] = True
                             logger.info("OAuth login completed")
-                            logger.info("Waiting for CLI to process OAuth callback...")
-                            time.sleep(5)
+                            time.sleep(5)  # Allow CLI to process callback
 
+                # Step 3 & 4: Detect CLI prompt and respond with 'y'
                 prompt_keywords = ["[y/n]", "(y/n)", "reissuing", "revoke", "proceed", "do you want to"]
                 if any(kw in line.lower() for kw in prompt_keywords):
                     logger.info(f"Found prompt: '{line}'")
@@ -101,29 +106,32 @@ def test_anaconda_token_install_with_oauth(
                             logger.info(f"Answered 'y' to {response_type} prompt")
                             state[response_type] = True
                         except BrokenPipeError:
-                            logger.warning(f"❗ BrokenPipeError while writing 'y' to {response_type} prompt")
+                            logger.warning(f"BrokenPipeError while writing 'y' to {response_type} prompt")
                             break
                     else:
-                        logger.warning("❗ CLI process has already exited before input.")
+                        logger.warning("CLI process has already exited before input.")
                         break
 
+                # Step 5: Detect success message
                 if "success!" in line.lower() and "token has been installed" in line.lower():
                     state["success"] = True
                     logger.info("Success message found!")
 
+    # Ensure CLI process ends
     token_proc.terminate()
     token_proc.wait()
 
     logger.info("\n============================================================")
     logger.info(f"Results: Exit code: {token_proc.returncode}, OAuth: {state['oauth']}, Reissue: {state['reissue']}, Condarc: {state['condarc']}, Success: {state['success']}")
 
-    assert state["oauth"] is True, "❌ OAuth login was not completed"
-    assert state["reissue"] is True, "❌ Token reissue step not handled"
-    assert state["condarc"] is True, "❌ Condarc setup prompt not handled"
+    # Final CLI assertions
+    assert state["oauth"] is True, "OAuth login was not completed"
+    assert state["reissue"] is True, "Token reissue step not handled"
+    assert state["condarc"] is True, "Condarc setup prompt not handled"
 
-    # Step 5: Verify conda search shows packages from repo/main
+    # Step 6: Run conda search to verify default repo setup
     logger.info("\n============================================================")
-    logger.info("Step 5: Running conda search flask to verify channel configuration...")
+    logger.info("Step 6: Running conda search flask to verify channel configuration...")
 
     search_proc = subprocess.Popen(
         ["conda", "search", "flask"],
@@ -142,12 +150,14 @@ def test_anaconda_token_install_with_oauth(
         logger.info("Conda search output:")
         search_lines = search_output.strip().split('\n')
 
+        # Verify package source
         packages_found = False
         all_repo_main = True
 
         for line in search_lines:
             logger.info(f"  {line}")
 
+            # Skip headers or non-package lines
             if "Name" in line or "Loading channels" in line or line.startswith("#"):
                 continue
 
@@ -163,4 +173,4 @@ def test_anaconda_token_install_with_oauth(
 
     assert search_exit_code == 0, f"Conda search should succeed, got exit code {search_exit_code}"
 
-    logger.info("\n✅ Test passed - Token installed and conda search verified!")
+    logger.info("\nTest passed - Token installed and conda search verified!")

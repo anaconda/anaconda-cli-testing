@@ -190,4 +190,4 @@ def test_anaconda_token_install_reject_condarc(
 
     assert search_exit_code == 0, f"Conda search should succeed, got exit code {search_exit_code}"
 
-    logger.info("\n✅ Test passed - Token installed but .condarc rejected, using default channels!")
+    logger.info("\nTest passed - Token installed but .condarc rejected, using default channels!")
