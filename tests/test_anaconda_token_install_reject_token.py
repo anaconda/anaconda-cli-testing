@@ -1,13 +1,13 @@
 # tests/test_anaconda_token_install_cancel_reissue.py
 
 import os
-import subprocess
-import time
-import logging
 import re
+import time
+import urllib.parse
+import logging
 from pathlib import Path
 import pytest
-import urllib.parse
+from src.common.cli_utils import launch_subprocess, terminate_process
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,8 @@ def test_anaconda_token_install_cancel_reissue(
     browser,
     cli_runner,
     pw_open_script,
-    free_port
+    free_port,
+    token_install_env
 ):
     """
     This test verifies that answering 'n' to token reissue prompt aborts installation:
@@ -34,101 +35,78 @@ def test_anaconda_token_install_cancel_reissue(
     """
     logger.info("Starting anaconda token install cancel test...")
 
-    # Setup clean environment and redirect browser port
-    _, _, clean_home = cli_runner()
-    env = os.environ.copy()
-    env["HOME"] = str(clean_home)
-    env["PATH"] = f"{Path.home()}/miniconda3/bin:{env.get('PATH', '')}"
-    env["BROWSER"] = str(pw_open_script)
-    env["ANACONDA_OAUTH_CALLBACK_PORT"] = str(free_port)
+    # Setup environment
+    env, clean_home = token_install_env
 
-    # Launch the token install CLI process
-    token_proc = subprocess.Popen(
+    # Launch the CLI process
+    token_proc = launch_subprocess(
         ["anaconda", "token", "install", "--org", "us-conversion"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=env,
-        bufsize=0
+        env
     )
 
-    # Track key test events
-    state = {"oauth": False, "reissue": False, "success": False}
-    start_time = time.time()
+    oauth_completed = False
+    cancelled = False
+    token_installed = False
+    timeout = time.time() + 120
 
-    # Read and respond to CLI output
-    while time.time() - start_time < 120:
-        if token_proc.stdout:
+    try:
+        while time.time() < timeout and token_proc.poll() is None:
             line = token_proc.stdout.readline().strip()
-            if line:
-                logger.info(f"[STDOUT] {line}")
+            if not line:
+                continue
+                
+            logger.info(f"[STDOUT] {line}")
 
-                # Step 2: Detect and perform OAuth login
-                if not state["oauth"] and "https://auth.anaconda.com" in line:
-                    oauth_url = re.search(r'https://[^\s]+', line).group(0)
-                    logger.info(f"Found OAuth URL: {oauth_url}")
+            # Handle OAuth URL
+            if not oauth_completed and "https://auth.anaconda.com" in line:
+                oauth_url = re.search(r'https://[^\s]+', line).group(0)
+                logger.info(f"Found OAuth URL: {oauth_url}")
 
-                    # Automate browser login flow
-                    page.goto(oauth_url)
-                    page.wait_for_load_state("networkidle")
-                    url_state = urllib.parse.parse_qs(
-                        urllib.parse.urlparse(oauth_url).query
-                    ).get("state", [""])[0]
+                # Perform OAuth login
+                page.goto(oauth_url)
+                page.wait_for_load_state("networkidle")
+                url_state = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(oauth_url).query
+                ).get("state", [""])[0]
 
-                    if url_state:
-                        res = api_request_context.post(
-                            f"/api/auth/login/password/{url_state}",
-                            data=credentials
-                        )
-                        if res.ok and res.json().get("redirect"):
-                            page.goto(res.json()["redirect"])
-                            page.wait_for_load_state("networkidle")
-                            state["oauth"] = True
-                            logger.info("OAuth login completed")
-                            time.sleep(5)
+                if url_state:
+                    res = api_request_context.post(
+                        f"/api/auth/login/password/{url_state}",
+                        data=credentials
+                    )
+                    if res.ok and res.json().get("redirect"):
+                        page.goto(res.json()["redirect"])
+                        page.wait_for_load_state("networkidle")
+                        oauth_completed = True
+                        logger.info("OAuth login completed")
+                        time.sleep(5)
 
-                # Step 3: Detect prompt and answer 'n'
-                prompt_keywords = ["[y/n]", "(y/n)", "reissuing", "revoke", "proceed", "do you want to"]
-                if any(kw in line.lower() for kw in prompt_keywords):
-                    logger.info(f"Found prompt: {line}")
-                    if not state["reissue"]:
-                        if token_proc.poll() is None:
-                            try:
-                                token_proc.stdin.write("n\n")
-                                token_proc.stdin.flush()
-                                state["reissue"] = True
-                                logger.info("Answered 'n' to cancel token reissue")
-                            except BrokenPipeError:
-                                logger.warning("BrokenPipeError while writing 'n'")
-                                break
-                        else:
-                            logger.warning("CLI process exited before answering 'n'")
-                            break
+            # Answer 'n' to first prompt (reissue prompt)
+            elif not cancelled and any(kw in line.lower() for kw in ["[y/n]", "(y/n)", "reissuing", "proceed"]):
+                logger.info(f"Found prompt: {line}")
+                try:
+                    token_proc.stdin.write("n\n")
+                    token_proc.stdin.flush()
+                    cancelled = True
+                    logger.info("Answered 'n' to cancel token reissue")
+                except BrokenPipeError:
+                    break
 
-                # Step 4: Detect if token was mistakenly installed
-                if "success!" in line.lower() and "token has been installed" in line.lower():
-                    state["success"] = True
-                    logger.warning("Token was installed despite cancellation!")
+            # Check if token was installed (shouldn't happen)
+            elif "success!" in line.lower() and "token has been installed" in line.lower():
+                token_installed = True
+                logger.warning("Token was installed despite cancellation!")
 
-        # Exit loop if process has ended
-        if token_proc.poll() is not None:
-            break
+    finally:
+        terminate_process(token_proc)
 
-        time.sleep(0.1)
+    logger.info(f"\nResults: Exit code: {token_proc.returncode}, OAuth: {oauth_completed}, "
+                f"Cancelled: {cancelled}, Token installed: {token_installed}")
 
-    # Terminate if still running
-    if token_proc.poll() is None:
-        token_proc.terminate()
-        token_proc.wait(timeout=5)
-
-    logger.info("\n" + "="*60)
-    logger.info(f"Results: Exit code: {token_proc.returncode}, OAuth: {state['oauth']}, Reissue: {state['reissue']}, Success: {state['success']}")
-
-    # Final assertions
-    assert state["oauth"], "Should handle OAuth login"
-    assert state["reissue"], "Should have answered the reissue prompt"
-    assert not state["success"], "Token should NOT be installed after cancellation"
+    # Verify expected behavior
+    assert oauth_completed, "Should handle OAuth login"
+    assert cancelled, "Should have answered 'n' to the reissue prompt"
+    assert not token_installed, "Token should NOT be installed after cancellation"
     assert token_proc.returncode != 0, "Should exit with non-zero code when cancelled"
 
     logger.info("Test passed - Token installation was properly cancelled.")

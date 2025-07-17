@@ -42,12 +42,6 @@ jobs:
           # Install anaconda-auth and conda-build via conda
           conda install -y anaconda-auth conda-build
           
-          # Verify installation
-          anaconda auth --version
-          
-          # Verify conda module is accessible
-          python -c "import conda; print('Conda module found')"
-          
           # Configure conda - ensure clean channel setup
           rm -f ~/.condarc
           rm -f ~/.local/conda/.condarc
@@ -81,8 +75,6 @@ jobs:
         shell: bash -el {0}
         continue-on-error: true
         run: |
-          # Add small delay to ensure clean process state
-          sleep 2
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             python -m pytest tests/ \
             -v \

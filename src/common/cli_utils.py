@@ -35,3 +35,26 @@ def capture(cmd: str, timeout: int = 60):
             logger.info(f"🔴 Stderr ({cmd!r}, binary): {err!r}")
 
     return out, proc.returncode
+
+
+def launch_subprocess(command, env):
+    """
+    Launch subprocess with pipes for interaction.
+    Wrapper for subprocess.Popen similar to capture() but for interactive processes.
+    """
+    return subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        bufsize=0
+    )
+
+
+def terminate_process(proc):
+    """Safely terminate a subprocess."""
+    if proc.poll() is None:
+        proc.terminate()
+        proc.wait(timeout=5)

@@ -172,3 +172,39 @@ def run_cli_command():
         )
     
     return _run
+
+
+# ─── 11) token_install_env fixture for token install tests ─────
+@pytest.fixture
+def token_install_env(cli_runner, pw_open_script, free_port):
+    """
+    Setup environment for token install tests.
+    Returns (env, clean_home) tuple.
+    """
+    _, _, clean_home = cli_runner()
+    env = {
+        **os.environ,
+        "HOME": str(clean_home),
+        "PATH": f"{Path.home()}/miniconda3/bin:{os.environ.get('PATH', '')}",
+        "BROWSER": str(pw_open_script),
+        "ANACONDA_OAUTH_CALLBACK_PORT": str(free_port)
+    }
+    return env, clean_home
+
+
+# ─── 12) isolated_conda_env fixture for isolated conda tests ───
+@pytest.fixture
+def isolated_conda_env(tmp_path, monkeypatch):
+    """
+    Provide an isolated conda environment with clean HOME.
+    Useful for tests that need to run without interference from other conda configurations.
+    """
+    clean_home = tmp_path / "clean_home"
+    clean_home.mkdir()
+    monkeypatch.setenv("HOME", str(clean_home))
+    
+    # Accept ToS for default channels to avoid authentication issues
+    for channel in ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r"]:
+        capture(f"conda tos accept --override-channels --channel {channel}")
+    
+    return clean_home
