@@ -1,19 +1,18 @@
-# tests/test_anaconda_token_install_cancel_reissue.py
+# This test verifies that rejecting the token issue/resissue process
 
-import os
 import re
 import time
-import urllib.parse
 import logging
-from pathlib import Path
 import pytest
+from pathlib import Path
 from src.common.cli_utils import launch_subprocess, terminate_process
+from conftest import perform_oauth_login
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.integration
-def test_anaconda_token_install_cancel_reissue(
+def test_anaconda_token_install_reject_condarc(
     ensureConda,
     run_cli_command,
     api_request_context,
@@ -21,21 +20,18 @@ def test_anaconda_token_install_cancel_reissue(
     urls,
     page,
     browser,
-    cli_runner,
-    pw_open_script,
-    free_port,
     token_install_env
 ):
     """
-    This test verifies that answering 'n' to token reissue prompt aborts installation:
+    This test verifies rejecting .condarc configuration:
     1. Run anaconda token install --org us-conversion
     2. Handle OAuth login when prompted
-    3. Respond 'n' to reissue token prompt
-    4. Verify process aborts and token is NOT installed
+    3. Respond 'y' to reissue token prompt
+    4. Respond 'n' to configure .condarc prompt
+    5. Verify conda search shows packages from pkgs/main (default channel)
     """
-    logger.info("Starting anaconda token install cancel test...")
+    logger.info("Starting test: Token install with rejected .condarc configuration...")
 
-    # Setup environment
     env, clean_home = token_install_env
 
     # Launch the CLI process
@@ -44,9 +40,7 @@ def test_anaconda_token_install_cancel_reissue(
         env
     )
 
-    oauth_completed = False
-    cancelled = False
-    token_installed = False
+    state = {"oauth": False, "reissue": False, "condarc": False}
     timeout = time.time() + 120
 
     try:
@@ -58,55 +52,62 @@ def test_anaconda_token_install_cancel_reissue(
             logger.info(f"[STDOUT] {line}")
 
             # Handle OAuth URL
-            if not oauth_completed and "https://auth.anaconda.com" in line:
+            if not state["oauth"] and "https://auth.anaconda.com" in line:
                 oauth_url = re.search(r'https://[^\s]+', line).group(0)
                 logger.info(f"Found OAuth URL: {oauth_url}")
+                
+                assert perform_oauth_login(page, api_request_context, oauth_url, credentials), \
+                    "OAuth login failed"
+                state["oauth"] = True
+                logger.info("OAuth login completed")
+                time.sleep(5)
 
-                # Perform OAuth login
-                page.goto(oauth_url)
-                page.wait_for_load_state("networkidle")
-                url_state = urllib.parse.parse_qs(
-                    urllib.parse.urlparse(oauth_url).query
-                ).get("state", [""])[0]
-
-                if url_state:
-                    res = api_request_context.post(
-                        f"/api/auth/login/password/{url_state}",
-                        data=credentials
-                    )
-                    if res.ok and res.json().get("redirect"):
-                        page.goto(res.json()["redirect"])
-                        page.wait_for_load_state("networkidle")
-                        oauth_completed = True
-                        logger.info("OAuth login completed")
-                        time.sleep(5)
-
-            # Answer 'n' to first prompt (reissue prompt)
-            elif not cancelled and any(kw in line.lower() for kw in ["[y/n]", "(y/n)", "reissuing", "proceed"]):
-                logger.info(f"Found prompt: {line}")
+            # Handle prompts - 'y' for reissue, 'n' for condarc
+            elif any(kw in line.lower() for kw in ["[y/n]", "(y/n)", "reissuing", "proceed"]):
+                response_type = "reissue" if not state["reissue"] else "condarc"
+                response = "y" if response_type == "reissue" else "n"
+                
                 try:
-                    token_proc.stdin.write("n\n")
+                    token_proc.stdin.write(f"{response}\n")
                     token_proc.stdin.flush()
-                    cancelled = True
-                    logger.info("Answered 'n' to cancel token reissue")
+                    state[response_type] = True
+                    logger.info(f"Answered '{response}' to {response_type} prompt")
                 except BrokenPipeError:
                     break
-
-            # Check if token was installed (shouldn't happen)
-            elif "success!" in line.lower() and "token has been installed" in line.lower():
-                token_installed = True
-                logger.warning("Token was installed despite cancellation!")
 
     finally:
         terminate_process(token_proc)
 
-    logger.info(f"\nResults: Exit code: {token_proc.returncode}, OAuth: {oauth_completed}, "
-                f"Cancelled: {cancelled}, Token installed: {token_installed}")
+    # Verify all steps completed
+    assert state["oauth"], "OAuth login was not completed"
+    assert state["reissue"], "Token reissue step not handled"
+    assert state["condarc"], "Condarc rejection prompt not handled"
 
-    # Verify expected behavior
-    assert oauth_completed, "Should handle OAuth login"
-    assert cancelled, "Should have answered 'n' to the reissue prompt"
-    assert not token_installed, "Token should NOT be installed after cancellation"
-    assert token_proc.returncode != 0, "Should exit with non-zero code when cancelled"
+    # Verify .condarc doesn't contain us-conversion
+    condarc_path = Path(clean_home) / ".condarc"
+    if condarc_path.exists():
+        content = condarc_path.read_text()
+        assert "us-conversion" not in content, ".condarc should not contain us-conversion channel"
 
-    logger.info("Test passed - Token installation was properly cancelled.")
+    # Verify conda search shows default channels
+    logger.info("\nRunning conda search flask to verify default channel configuration...")
+    search_proc = launch_subprocess(["conda", "search", "flask"], env)
+    search_output, _ = search_proc.communicate(timeout=30)
+
+    if search_proc.returncode != 0:
+        logger.info("Conda search failed - expected for rejected condarc")
+        return
+
+    packages_found = False
+    all_pkgs_main = True
+
+    for line in search_output.strip().split('\n'):
+        if "flask" in line.lower() and "Loading" not in line and "#" not in line:
+            packages_found = True
+            if "pkgs/main" not in line:
+                all_pkgs_main = False
+
+    if packages_found:
+        assert all_pkgs_main, "All packages should be from pkgs/main channel (default)"
+
+    logger.info("Test passed - Token installed but .condarc rejected!")

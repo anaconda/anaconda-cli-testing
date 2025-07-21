@@ -1,13 +1,12 @@
 # This test verifies that rejecting .condarc configuration results in default channels.
 
-import os
 import re
 import time
-import urllib.parse
 import logging
-from pathlib import Path
 import pytest
+from pathlib import Path
 from src.common.cli_utils import launch_subprocess, terminate_process
+from conftest import perform_oauth_login
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +20,6 @@ def test_anaconda_token_install_reject_condarc(
     urls,
     page,
     browser,
-    cli_runner,
-    pw_open_script,
-    free_port,
     token_install_env
 ):
     """
@@ -36,7 +32,6 @@ def test_anaconda_token_install_reject_condarc(
     """
     logger.info("Starting test: Token install with rejected .condarc configuration...")
 
-    # Setup environment
     env, clean_home = token_install_env
 
     # Launch the CLI process
@@ -60,25 +55,14 @@ def test_anaconda_token_install_reject_condarc(
             if not state["oauth"] and "https://auth.anaconda.com" in line:
                 oauth_url = re.search(r'https://[^\s]+', line).group(0)
                 logger.info(f"Found OAuth URL: {oauth_url}")
-
-                # Perform OAuth login
-                page.goto(oauth_url)
-                page.wait_for_load_state("networkidle")
-                url_state = urllib.parse.parse_qs(
-                    urllib.parse.urlparse(oauth_url).query
-                ).get("state", [""])[0]
-
-                if url_state:
-                    res = api_request_context.post(
-                        f"/api/auth/login/password/{url_state}",
-                        data=credentials
-                    )
-                    if res.ok and res.json().get("redirect"):
-                        page.goto(res.json()["redirect"])
-                        page.wait_for_load_state("networkidle")
-                        state["oauth"] = True
-                        logger.info("OAuth login completed")
-                        time.sleep(5)
+                
+                # Use common OAuth login function from conftest
+                # This function already handles the api_request_context.post internally
+                assert perform_oauth_login(page, api_request_context, oauth_url, credentials), \
+                    "OAuth login failed"
+                state["oauth"] = True
+                logger.info("OAuth login completed")
+                time.sleep(5)
 
             # Handle prompts - 'y' for reissue, 'n' for condarc
             elif any(kw in line.lower() for kw in ["[y/n]", "(y/n)", "reissuing", "proceed"]):
@@ -107,30 +91,29 @@ def test_anaconda_token_install_reject_condarc(
         content = condarc_path.read_text()
         assert "us-conversion" not in content, ".condarc should not contain us-conversion channel"
 
+    # Accept ToS for default channels before searching
+    logger.info("\nAccepting ToS for default channels...")
+    tos_result = run_cli_command(
+        "conda tos accept --channel https://repo.anaconda.com/pkgs/main",
+        extra_env={"HOME": str(clean_home)}
+    )
+
     # Verify conda search shows default channels
     logger.info("\nRunning conda search flask to verify default channel configuration...")
     
-    # First, ensure conda is properly initialized
-    init_result = run_cli_command("conda config --set always_yes yes", extra_env={"HOME": str(clean_home)})
-    logger.info(f"Conda config result: {init_result.returncode}")
-    
-    # Now run conda search
+    # Run conda search using run_cli_command for consistency
     search_result = run_cli_command("conda search flask", extra_env={"HOME": str(clean_home)})
     
     logger.info(f"Conda search exit code: {search_result.returncode}")
+    
+    # Log the output regardless of success/failure
     if search_result.stdout:
-        logger.info("Conda search output:")
-        logger.info(search_result.stdout)
+        logger.info(f"Conda search stdout: {search_result.stdout[:500]}")  # First 500 chars
     if search_result.stderr:
-        logger.info("Conda search error:")
-        logger.info(search_result.stderr)
+        logger.info(f"Conda search stderr: {search_result.stderr[:500]}")  # First 500 chars
 
-    # If search failed, it might be due to token/channel issues - that's okay for this test
-    if search_result.returncode != 0:
-        logger.info("Conda search failed - likely due to default channel configuration (expected)")
-        # For rejected condarc, conda might not have proper channel access
-        # The important thing is that we rejected the condarc configuration
-        return
+    # Verify search succeeded after ToS acceptance
+    assert search_result.returncode == 0, f"Conda search should succeed after ToS acceptance: {search_result.stderr}"
 
     packages_found = False
     all_pkgs_main = True
@@ -143,13 +126,13 @@ def test_anaconda_token_install_reject_condarc(
                 
             if "flask" in line.lower():
                 packages_found = True
-                logger.info(f"Found package line: {line}")
-                if "pkgs/main" not in line:
+                # Since we rejected .condarc and accepted ToS for default channel,
+                # packages should be from default channel
+                if "us-conversion" in line:
                     all_pkgs_main = False
-                    logger.warning(f"Found package not from pkgs/main: {line}")
+                    logger.warning(f"Found package from us-conversion channel: {line}")
 
-    if packages_found:
-        assert all_pkgs_main, "All packages should be from pkgs/main channel (default)"
-        logger.info("All flask packages are from pkgs/main channel")
+    assert packages_found, "Should find flask packages from default channel"
+    assert all_pkgs_main, "No packages should be from us-conversion channel"
 
     logger.info("Test passed - Token installed but .condarc rejected!")

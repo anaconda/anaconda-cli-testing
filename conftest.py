@@ -10,6 +10,11 @@ from dotenv import load_dotenv
 from playwright.sync_api import APIRequestContext
 from src.common.conda_helper import ensure_conda_installed
 from src.common.cli_utils import capture  # you can still use this in other tests
+import urllib.parse
+import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ─── 1) Load environment variables ──────────────────────────────
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
@@ -23,7 +28,7 @@ hubPassword = os.getenv("HUB_PASSWORD")        # login password
 requiredKeys = ["ANACONDA_API_BASE", "ANACONDA_UI_BASE", "HUB_EMAIL", "HUB_PASSWORD"]
 missing      = [k for k in requiredKeys if not os.getenv(k)]
 if missing:
-    pytest.exit(f"❌ Missing env vars: {', '.join(missing)}", 1)
+    pytest.exit(f"Missing env vars: {', '.join(missing)}", 1)
 
 # ─── 3) Ensure Conda installed and on PATH ─────────────────────
 @pytest.fixture(scope="session")
@@ -33,7 +38,7 @@ def ensureConda():
     and prepend its bin to PATH.
     """
     info, code = ensure_conda_installed()
-    assert code == 0, f"❌ Could not install conda: {info.decode()}"
+    assert code == 0, f"Could not install conda: {info.decode()}"
 
     condaBin = Path.home() / "miniconda3" / "bin"
     os.environ["PATH"] = str(condaBin) + os.pathsep + os.environ.get("PATH", "")
@@ -208,3 +213,54 @@ def isolated_conda_env(tmp_path, monkeypatch):
         capture(f"conda tos accept --override-channels --channel {channel}")
     
     return clean_home
+
+
+# ─── 13) Common OAuth helper functions ─────────────────────────
+# These are helper functions (not fixtures) used across multiple tests
+
+def perform_oauth_login(page, api_request_context, oauth_url, credentials):
+    """
+    Handle OAuth authentication flow through browser and API.
+    This common function is used by multiple tests to avoid code duplication.
+    
+    Args:
+        page: Playwright page object
+        api_request_context: Playwright API context
+        oauth_url: The OAuth URL containing state parameter
+        credentials: Dict with 'email' and 'password'
+        
+    Returns:
+        bool: True if OAuth login completed successfully
+    """
+    try:
+        # Navigate to OAuth URL
+        page.goto(oauth_url)
+        page.wait_for_load_state("networkidle")
+        
+        # Extract state from OAuth URL
+        url_state = urllib.parse.parse_qs(
+            urllib.parse.urlparse(oauth_url).query
+        ).get("state", [""])[0]
+        
+        if not url_state:
+            logger.error("No state parameter found in OAuth URL")
+            return False
+        
+        # Perform API login
+        res = api_request_context.post(
+            f"/api/auth/login/password/{url_state}",
+            data=credentials
+        )
+        
+        if res.ok and res.json().get("redirect"):
+            # Follow redirect to complete OAuth flow
+            page.goto(res.json()["redirect"])
+            page.wait_for_load_state("networkidle")
+            return True
+        else:
+            logger.error(f"OAuth API login failed with status: {res.status}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"OAuth login error: {e}")
+        return False
