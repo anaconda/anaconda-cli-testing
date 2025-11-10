@@ -1,11 +1,23 @@
 # This test verifies that 'anaconda token install' with organization flag:
 
+import os
 import re
 import time
 import logging
 import pytest
+from pathlib import Path
 from src.common.cli_utils import launch_subprocess, terminate_process
-from conftest import perform_oauth_login
+from src.common.defaults import (
+    TOKEN_INSTALL_ORG,
+    TOKEN_INSTALL_TIMEOUT,
+    PROMPT_KEYWORDS,
+    REISSUE_KEYWORDS,
+    CONDARC_KEYWORDS,
+    SUCCESS_MESSAGE_KEYWORDS,
+    TOKEN_INSTALLED_KEYWORD,
+    SEARCH_PACKAGE,
+)
+from conftest import perform_oauth_login, extract_and_complete_oauth_url
 
 logger = logging.getLogger(__name__)
 
@@ -36,48 +48,65 @@ def test_anaconda_token_install_with_oauth(
 
     # Launch the CLI process using wrapper
     token_proc = launch_subprocess(
-        ["anaconda", "token", "install", "--org", "us-conversion"],
+        ["anaconda", "token", "install", "--org", TOKEN_INSTALL_ORG],
         env
     )
 
     state = {"oauth": False, "reissue": False, "condarc": False, "token_installed": False}
-    timeout = time.time() + 120
+    timeout = time.time() + TOKEN_INSTALL_TIMEOUT
 
     try:
         # Read CLI output and respond to prompts
         while time.time() < timeout and token_proc.poll() is None:
             line = token_proc.stdout.readline().strip()
-            if not line:
-                continue
+            assert line, "CLI process ended unexpectedly or produced no output"
                 
             logger.info(f"[STDOUT] {line}")
 
             # Detect OAuth URL and perform login
-            if not state["oauth"] and "https://auth.anaconda.com" in line:
-                oauth_url = re.search(r'https://[^\s]+', line).group(0)
-                logger.info(f"Found OAuth URL: {oauth_url}")
+            if not state["oauth"] and ("https://auth.anaconda.com" in line or "[BROWSER-STUB-URL]" in line):
+                oauth_url = extract_and_complete_oauth_url(line, token_proc, clean_home, env)
+                
+                assert oauth_url is not None, f"Failed to extract OAuth URL from CLI output line: {line}"
+                logger.info(f"Using OAuth URL: {oauth_url[:100]}...")
 
                 # Use common OAuth login function from conftest
-                assert perform_oauth_login(page, api_request_context, oauth_url, credentials), \
-                    "OAuth login failed"
+                # Even if URL is incomplete, perform_oauth_login will navigate and extract state
+                logger.info(f"Attempting OAuth login with URL (may be incomplete): {oauth_url[:150]}...")
+                login_success = perform_oauth_login(page, api_request_context, oauth_url, credentials)
+                if not login_success:
+                    # If login failed, try navigating to the URL directly and extracting state from page
+                    logger.warning("OAuth login failed, trying direct navigation approach...")
+                    try:
+                        page.goto(oauth_url, timeout=30000, wait_until="domcontentloaded")
+                        # Wait a bit for any redirects
+                        time.sleep(2)
+                        actual_url = page.url
+                        logger.info(f"Page redirected to: {actual_url[:150]}...")
+                        # Try login again with the actual URL
+                        assert "state=" in actual_url or any(len(part) > 30 for part in actual_url.split('/') if part), "Actual URL after direct navigation still incomplete"
+                        login_success = perform_oauth_login(page, api_request_context, actual_url, credentials)
+                    except Exception as e:
+                        logger.error(f"Direct navigation also failed: {e}")
+                
+                assert login_success, "OAuth login failed - authentication step did not complete successfully"
                 state["oauth"] = True
                 logger.info("OAuth login completed")
                 time.sleep(5)  # Allow CLI to process callback
 
             # Check if token was installed
-            if "token has been installed" in line.lower():
+            if TOKEN_INSTALLED_KEYWORD in line.lower():
                 state["token_installed"] = True
                 logger.info("Token installation detected")
 
             # Detect CLI prompt and respond with 'y'
-            prompt_keywords = ["[y/n]", "(y/n)", "reissuing", "revoke", "proceed", "do you want to", "prepared to set"]
-            if any(kw in line.lower() for kw in prompt_keywords):
+            if any(kw in line.lower() for kw in PROMPT_KEYWORDS):
                 logger.info(f"Found prompt: '{line}'")
                 
                 # Determine prompt type based on keywords
-                if "reissuing" in line.lower() or "revoke" in line.lower() or "existing token" in line.lower():
+                if any(kw in line.lower() for kw in REISSUE_KEYWORDS):
                     response_type = "reissue"
-                elif "condarc" in line.lower() or "channel" in line.lower() or "prepared to set" in line.lower():
+                elif any(kw in line.lower() for kw in CONDARC_KEYWORDS):
                     response_type = "condarc"
                 else:
                     response_type = "reissue" if not state["reissue"] else "condarc"
@@ -92,7 +121,7 @@ def test_anaconda_token_install_with_oauth(
                     break
 
             # Detect success message
-            if "success!" in line.lower() and "token has been installed" in line.lower():
+            if all(kw in line.lower() for kw in SUCCESS_MESSAGE_KEYWORDS):
                 logger.info("Success message found!")
                 time.sleep(2)
                 break
@@ -111,20 +140,20 @@ def test_anaconda_token_install_with_oauth(
         if not state["condarc"]:
             state["condarc"] = True
 
-    # Final CLI assertions
-    assert state["oauth"], "OAuth login was not completed"
-
+    # Final CLI assertions with meaningful messages
+    assert state["oauth"], "OAuth login was not completed - authentication step failed"
+    
     if not state["reissue"]:
         logger.warning("Reissue prompt not detected — possibly a fresh token. Skipping assertion.")
     else:
-     assert state["reissue"], "Token reissue step not handled"
+        assert state["reissue"], "Token reissue step was not handled - expected 'y' response to reissue prompt"
 
-    assert state["condarc"], "Condarc setup prompt not handled"
+    assert state["condarc"], "Condarc setup prompt was not handled - expected 'y' response to configure .condarc prompt"
 
     # Run conda search to verify default repo setup
-    logger.info("\nRunning conda search flask to verify channel configuration...")
+    logger.info(f"\nRunning conda search {SEARCH_PACKAGE} to verify channel configuration...")
 
-    search_proc = launch_subprocess(["conda", "search", "flask"], env)
+    search_proc = launch_subprocess(["conda", "search", SEARCH_PACKAGE], env)
     search_output, _ = search_proc.communicate(timeout=30)
 
     logger.info(f"Conda search exit code: {search_proc.returncode}")
@@ -137,15 +166,15 @@ def test_anaconda_token_install_with_oauth(
         if "Name" in line or "Loading channels" in line or line.startswith("#") or not line.strip():
             continue
 
-        if "flask" in line.lower():
+        if SEARCH_PACKAGE in line.lower():
             packages_found = True
             logger.info(f"Found package: {line}")
             if "repo/main" not in line:
                 all_repo_main = False
                 logger.warning(f"Found package not from repo/main: {line}")
 
-    assert packages_found, "Should find flask packages"
-    assert all_repo_main, "All packages should be from repo/main channel"
-    assert search_proc.returncode == 0, "Conda search should succeed"
+    assert packages_found, f"Expected to find {SEARCH_PACKAGE} packages in conda search results"
+    assert all_repo_main, f"All {SEARCH_PACKAGE} packages should be from repo/main channel (org channel) when .condarc is accepted, but found packages from other channels"
+    assert search_proc.returncode == 0, f"Conda search command failed with exit code {search_proc.returncode}"
 
     logger.info("Test passed - Token installed and conda search verified!")

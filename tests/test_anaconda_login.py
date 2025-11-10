@@ -85,10 +85,17 @@ def _perform_browser_login(page, api_request_context, state, urls, credentials):
     logger.info("Step 2: Performing browser login...")
     
     login = api_request_context.post(f"/api/auth/login/password/{state}", data=credentials)
+    assert login.ok, f"Password login failed: {login.status}, response: {login.text if hasattr(login, 'text') else 'N/A'}"
+    
     redirect_url = login.json().get("redirect")
     assert redirect_url, "No redirect URL returned"
     
+    logger.info(f"Navigating to redirect URL: {redirect_url}")
     page.goto(redirect_url, timeout=PAGE_LOAD_TIMEOUT)
+    page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
+    
+    # Wait for welcome text with increased timeout
+    logger.info("Waiting for welcome text...")
     expect(page.get_by_text(EXPECTED_TEXT["welcome"])).to_be_visible(timeout=PAGE_LOAD_TIMEOUT)
     
     assert page.url.startswith(urls['ui']), f"Expected to be on {urls['ui']}, got {page.url}"
@@ -105,7 +112,7 @@ def _perform_cli_oauth_flow(cli_runner, page):
     oauth_url = _capture_oauth_url_from_cli(proc)
     assert oauth_url, "Failed to capture OAuth URL from CLI"
     
-    logger.info("Navigating to OAuth URL in browser...")
+    logger.info(f"Navigating to OAuth URL in browser: {oauth_url}")
     page.goto(oauth_url, timeout=PAGE_LOAD_TIMEOUT)
     page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
     
@@ -117,26 +124,47 @@ def _perform_cli_oauth_flow(cli_runner, page):
 def _capture_oauth_url_from_cli(proc):
     """Capture OAuth URL from CLI stdout."""
     oauth_url, start_time = None, time.time()
+    all_output = []  # Store all output for debugging
     
     while time.time() - start_time < OAUTH_CAPTURE_TIMEOUT:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                break
-            time.sleep(0.05)
-            continue
-        
-        line = line.strip()
-        logger.debug(f"[CLI stdout] {line}")
-        
-        matches = re.findall(r"https?://[^\s]+", line)
-        for u in matches:
-            if URL_PATTERNS["oauth"] in u:
-                oauth_url = u
-                logger.info(f"Captured OAuth URL: {oauth_url}")
-                break
-        if oauth_url:
+        # Check if process has exited
+        if proc.poll() is not None:
+            # Process exited, read any remaining output
+            remaining = proc.stdout.read()
+            if remaining:
+                all_output.append(remaining)
+                logger.info(f"[CLI final output] {remaining}")
             break
+        
+        # Try to read a line (non-blocking check first)
+        try:
+            # On Windows, we can't use select, so just try reading
+            line = proc.stdout.readline()
+            if not line:
+                time.sleep(0.1)  # Slightly longer sleep when no data
+                continue
+            
+            line = line.strip()
+            if line:  # Only log non-empty lines
+                logger.info(f"[CLI stdout] {line}")
+                all_output.append(line)
+            
+            # Search for OAuth URL in the line
+            matches = re.findall(r"https?://[^\s\)]+", line)  # Added \) to handle URLs in parentheses
+            for u in matches:
+                if URL_PATTERNS["oauth"] in u:
+                    oauth_url = u
+                    logger.info(f"Captured OAuth URL: {oauth_url}")
+                    break
+            if oauth_url:
+                break
+        except Exception as e:
+            logger.warning(f"Error reading from CLI: {e}")
+            time.sleep(0.1)
+    
+    if not oauth_url:
+        logger.error(f"Failed to capture OAuth URL. CLI output: {''.join(all_output[-10:])}")  # Last 10 lines
+    
     return oauth_url
 
 
@@ -172,11 +200,14 @@ def _verify_login_success(page, urls):
     logger.info("Step 4: Verifying login success...")
     
     success_url = f"{urls['ui']}{URL_PATTERNS['success']}"
+    logger.info(f"Navigating to success URL: {success_url}")
     page.goto(success_url, timeout=PAGE_LOAD_TIMEOUT)
     page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
     
     assert URL_PATTERNS["success"] in page.url, f"Expected '{URL_PATTERNS['success']}' in URL, got {page.url}"
+    
+    # Wait for success text with increased timeout
+    logger.info("Waiting for success text...")
     expect(page.get_by_text(EXPECTED_TEXT["success"])).to_be_visible(timeout=PAGE_LOAD_TIMEOUT)
     
-    page.context.close()
     logger.info("Step 4: Success verification completed.")
