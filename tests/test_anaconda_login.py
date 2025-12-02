@@ -44,12 +44,18 @@ def test_anaconda_login_flow(
         _perform_browser_login(page, api_request_context, state, urls, credentials)
         assert page.url.startswith(urls['ui']), f"Expected to be on {urls['ui']}, got {page.url}"
         
+        # Graceful cleanup after test is completed
+        page.context.close()
+        
     elif auth_method == "cli_oauth":
         # Browser and CLI needed
         page = request.getfixturevalue("page")
         cli_runner = request.getfixturevalue("cli_runner")
         oauth_url = _perform_cli_oauth_flow(cli_runner, page)
         assert oauth_url and URL_PATTERNS["oauth"] in oauth_url, "CLI OAuth should return valid URL"
+        
+        # Graceful cleanup after test is completed
+        page.context.close()
         
     elif auth_method == "full_flow":
         # Complete end-to-end integration - all fixtures needed
@@ -61,6 +67,9 @@ def test_anaconda_login_flow(
         oauth_url = _perform_cli_oauth_flow(cli_runner, page)
         _verify_login_success(page, urls)
         logger.info("Complete end‐to‐end CLI+browser login flow completed successfully!")
+        
+        # Graceful cleanup after test is completed
+        page.context.close()
 
 
 def _perform_api_authentication(api_request_context, urls, credentials):
@@ -208,6 +217,10 @@ def _verify_login_success(page, urls):
     
     # Wait for success text with increased timeout
     logger.info("Waiting for success text...")
-    expect(page.get_by_text(EXPECTED_TEXT["success"])).to_be_visible(timeout=PAGE_LOAD_TIMEOUT)
+    success_text_element = page.get_by_text(EXPECTED_TEXT["success"])
+    expect(success_text_element).to_be_visible(timeout=PAGE_LOAD_TIMEOUT)
+    
+    # Assert that success text is actually present and visible
+    assert success_text_element.is_visible(), f"Success text '{EXPECTED_TEXT['success']}' should be visible on the page"
     
     logger.info("Step 4: Success verification completed.")

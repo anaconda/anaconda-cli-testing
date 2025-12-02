@@ -547,3 +547,40 @@ def perform_oauth_login(page, api_request_context, oauth_url, credentials):
     except Exception as e:
         logger.error(f"OAuth login error: {e}", exc_info=True)
         return False
+
+
+def retry_oauth_login_with_direct_navigation(page, api_request_context, oauth_url, credentials):
+    """
+    Retry OAuth login using direct navigation approach when initial login fails.
+    This is a fallback mechanism that navigates directly to the OAuth URL,
+    waits for redirects, and retries login with the actual URL.
+    
+    This common function is used by multiple tests to avoid code duplication.
+    
+    Args:
+        page: Playwright page object
+        api_request_context: Playwright API context
+        oauth_url: The OAuth URL to navigate to
+        credentials: Dict with 'email' and 'password'
+        
+    Returns:
+        bool: True if OAuth login completed successfully after retry, False otherwise
+    """
+    logger.warning("OAuth login failed, trying direct navigation approach...")
+    try:
+        page.goto(oauth_url, timeout=30000, wait_until="domcontentloaded")
+        time.sleep(2)
+        actual_url = page.url
+        logger.info(f"Page redirected to: {actual_url[:150]}...")
+        # Try login with actual_url if it looks valid, otherwise try with original oauth_url
+        if "state=" in actual_url or any(len(part) > 30 for part in actual_url.split('/') if part):
+            login_result = perform_oauth_login(page, api_request_context, actual_url, credentials)
+            if login_result:
+                return True
+        # If actual_url didn't work or wasn't valid, try with original oauth_url one more time
+        logger.info("Retrying with original OAuth URL...")
+        return perform_oauth_login(page, api_request_context, oauth_url, credentials)
+    except Exception as e:
+        logger.error(f"Direct navigation also failed: {e}")
+    
+    return False

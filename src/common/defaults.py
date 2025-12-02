@@ -2,7 +2,7 @@
 # ─── Constants for anaconda‐auth testing ───────────────────────────────
 PACKAGE_NAME              = "anaconda-auth"     # the conda package name
 CLI_SUBCOMMAND            = "anaconda auth"     # what you actually run on the CLI
-ANACONDA_AUTH_VERSION     = "0.8.6"             # what we expect for --version/-V
+ANACONDA_AUTH_VERSION     = "0.11.0"             # what we expect for --version/-V
 CONDA_VERSION             = "25.5.1"            # conda version to test against
 
 # ─── Conda Installation ──────────────────────────────────────────────

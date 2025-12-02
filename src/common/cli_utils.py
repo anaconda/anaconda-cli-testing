@@ -41,12 +41,13 @@ def launch_subprocess(command, env):
     """
     Launch subprocess with pipes for interaction.
     Wrapper for subprocess.Popen similar to capture() but for interactive processes.
+    Merges stderr into stdout to capture all output including OAuth URLs.
     """
     return subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # Merge stderr into stdout to capture all output
         text=True,
         env=env,
         bufsize=0
