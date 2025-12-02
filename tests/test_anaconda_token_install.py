@@ -36,9 +36,7 @@ SUCCESS_DETECTION_DELAY = 2  # seconds to wait after success message
 TOS_ACCEPTANCE_TIMEOUT = 10  # seconds timeout for ToS acceptance
 CONDA_SEARCH_TIMEOUT = 30  # seconds timeout for conda search
 PKG_KILL_TIMEOUT = 5  # seconds timeout for pkill command
-PROCESS_WAIT_TIMEOUT = 1  # seconds timeout for process wait
-PROCESS_CLEANUP_DELAY = 1  # seconds to wait after killing processes
-FILE_SYNC_DELAY = 1  # seconds to wait for file system to sync
+PROCESS_WAIT_TIMEOUT = 1  # seconds timeout/delay for process operations
 REPO_MAIN_CHANNEL_URL = "https://repo.anaconda.com/pkgs/main"
 
 logger = logging.getLogger(__name__)
@@ -97,7 +95,7 @@ def _setup_and_perform_pre_authentication(env, clean_home, page):
             capture_output=True,
             timeout=PKG_KILL_TIMEOUT
         )
-        time.sleep(PROCESS_CLEANUP_DELAY)
+        time.sleep(PROCESS_WAIT_TIMEOUT)
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     
@@ -333,7 +331,7 @@ def _verify_condarc_file(clean_home, token_proc, state):
         AssertionError: If .condarc file doesn't exist or doesn't contain expected content
     """
     # Give a moment for .condarc file to be written to disk
-    time.sleep(FILE_SYNC_DELAY)
+    time.sleep(PROCESS_WAIT_TIMEOUT)
     
     # Verify .condarc was created/updated (only if token install succeeded)
     condarc_path = Path(clean_home) / ".condarc"

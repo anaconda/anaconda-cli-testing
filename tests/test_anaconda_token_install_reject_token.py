@@ -28,9 +28,10 @@ from tests.test_anaconda_login import _capture_oauth_url_from_cli, _wait_for_cli
 # ─── Test-specific constants ────────────────────────────────────────────
 CLI_STARTUP_DELAY = 0.5  # seconds to wait for CLI to start
 OUTPUT_READ_DELAY = 0.1  # seconds to wait when no output available
-OAUTH_CALLBACK_DELAY = 5  # seconds to allow CLI to process OAuth callback
+DEFAULT_TIMEOUT_SECONDS = 5  # default timeout/delay value in seconds
+OAUTH_CALLBACK_DELAY = DEFAULT_TIMEOUT_SECONDS  # seconds to allow CLI to process OAuth callback
 TOKEN_SAVE_DELAY = 3  # seconds to wait for auth token to be saved
-PKG_KILL_TIMEOUT = 5  # seconds timeout for pkill command
+PKG_KILL_TIMEOUT = DEFAULT_TIMEOUT_SECONDS  # seconds timeout for pkill command
 PROCESS_CLEANUP_DELAY = 1  # seconds to wait after killing processes
 CONDA_SEARCH_TIMEOUT = 30  # seconds timeout for conda search
 
