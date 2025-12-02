@@ -96,8 +96,10 @@ def _setup_and_perform_pre_authentication(env, clean_home, page):
             timeout=PKG_KILL_TIMEOUT
         )
         time.sleep(PROCESS_WAIT_TIMEOUT)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    except subprocess.TimeoutExpired:
+        logger.warning(f"pkill command timed out after {PKG_KILL_TIMEOUT} seconds")
+    except FileNotFoundError:
+        logger.debug("pkill command not found (expected on some systems)")
     
     # Launch login process
     login_proc = subprocess.Popen(
