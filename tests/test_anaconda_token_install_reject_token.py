@@ -5,6 +5,7 @@ import re
 import time
 import logging
 import subprocess
+import socket
 import pytest
 from pathlib import Path
 from src.common.cli_utils import launch_subprocess, terminate_process
@@ -17,8 +18,21 @@ from src.common.defaults import (
     TOKEN_INSTALLED_KEYWORD,
     SEARCH_PACKAGE,
     EXPECTED_CHANNEL,
+    PAGE_LOAD_TIMEOUT,
+    NETWORK_IDLE_TIMEOUT,
+    CLI_COMPLETION_TIME,
 )
 from conftest import perform_oauth_login, extract_and_complete_oauth_url, retry_oauth_login_with_direct_navigation
+from tests.test_anaconda_login import _capture_oauth_url_from_cli, _wait_for_cli_completion
+
+# ─── Test-specific constants ────────────────────────────────────────────
+CLI_STARTUP_DELAY = 0.5  # seconds to wait for CLI to start
+OUTPUT_READ_DELAY = 0.1  # seconds to wait when no output available
+OAUTH_CALLBACK_DELAY = 5  # seconds to allow CLI to process OAuth callback
+TOKEN_SAVE_DELAY = 3  # seconds to wait for auth token to be saved
+PKG_KILL_TIMEOUT = 5  # seconds timeout for pkill command
+PROCESS_CLEANUP_DELAY = 1  # seconds to wait after killing processes
+CONDA_SEARCH_TIMEOUT = 30  # seconds timeout for conda search
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +65,6 @@ def test_anaconda_token_install_reject_token(
     logger.info("Authenticating via 'anaconda auth login' before token install...")
     
     # Get a free port for the login process
-    import socket
     login_sock = socket.socket()
     login_sock.bind(("", 0))
     login_port = login_sock.getsockname()[1]
@@ -67,9 +80,9 @@ def test_anaconda_token_install_reject_token(
         subprocess.run(
             ["pkill", "-f", f"anaconda.*auth.*login"],
             capture_output=True,
-            timeout=5
+            timeout=PKG_KILL_TIMEOUT
         )
-        time.sleep(1)
+        time.sleep(PROCESS_CLEANUP_DELAY)
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     
@@ -81,11 +94,7 @@ def test_anaconda_token_install_reject_token(
         stderr=subprocess.STDOUT,
         text=True,
     )
-    time.sleep(0.5)
-    
-    # Import helper functions from test_anaconda_login
-    from tests.test_anaconda_login import _capture_oauth_url_from_cli, _wait_for_cli_completion
-    from src.common.defaults import PAGE_LOAD_TIMEOUT, NETWORK_IDLE_TIMEOUT
+    time.sleep(CLI_STARTUP_DELAY)
     
     oauth_url = _capture_oauth_url_from_cli(login_proc)
     if not oauth_url:
@@ -99,7 +108,6 @@ def test_anaconda_token_install_reject_token(
     page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
     
     # Wait for login process to complete naturally (don't terminate prematurely)
-    from src.common.defaults import CLI_COMPLETION_TIME
     logger.info("Waiting for login process to complete...")
     start_time = time.time()
     login_exited = False
@@ -109,13 +117,13 @@ def test_anaconda_token_install_reject_token(
             login_exited = True
             logger.info(f"Login process exited with code {login_proc.returncode}")
             break
-        time.sleep(0.1)
+        time.sleep(OUTPUT_READ_DELAY)
     
     if not login_exited:
         logger.warning("Login process didn't exit within timeout, but continuing...")
         # Don't terminate - let it continue in background, token might still be saved
     
-    time.sleep(3)  # Give extra time for auth token to be saved
+    time.sleep(TOKEN_SAVE_DELAY)  # Give extra time for auth token to be saved
     
     # Ensure env uses the same HOME (should already be set, but double-check)
     env["HOME"] = str(clean_home)
@@ -128,7 +136,7 @@ def test_anaconda_token_install_reject_token(
     )
 
     # Give CLI a moment to start up
-    time.sleep(0.5)
+    time.sleep(CLI_STARTUP_DELAY)
 
     state = {"oauth": True, "reissue": False, "condarc": False}
     timeout = time.time() + TOKEN_INSTALL_TIMEOUT
@@ -137,7 +145,7 @@ def test_anaconda_token_install_reject_token(
         while time.time() < timeout and token_proc.poll() is None:
             line = token_proc.stdout.readline().strip()
             if not line:
-                time.sleep(0.1)  # Small delay when no output to avoid busy waiting
+                time.sleep(OUTPUT_READ_DELAY)  # Small delay when no output to avoid busy waiting
                 continue
                     
             logger.info(f"[STDOUT] {line}")
@@ -157,7 +165,7 @@ def test_anaconda_token_install_reject_token(
                 assert login_success, "OAuth login failed - authentication step did not complete successfully"
                 state["oauth"] = True
                 logger.info("OAuth login completed")
-                time.sleep(5)
+                time.sleep(OAUTH_CALLBACK_DELAY)
 
             # Handle prompts - 'n' for reissue (reject token), 'n' for condarc
             elif any(kw in line.lower() for kw in PROMPT_KEYWORDS):
@@ -226,7 +234,7 @@ def test_anaconda_token_install_reject_token(
     # Verify conda search shows default channels
     logger.info(f"\nRunning conda search {SEARCH_PACKAGE} to verify default channel configuration...")
     search_proc = launch_subprocess(["conda", "search", SEARCH_PACKAGE], env)
-    search_output, _ = search_proc.communicate(timeout=30)
+    search_output, _ = search_proc.communicate(timeout=CONDA_SEARCH_TIMEOUT)
 
     if search_proc.returncode != 0:
         logger.info("Conda search failed - expected for rejected token")
