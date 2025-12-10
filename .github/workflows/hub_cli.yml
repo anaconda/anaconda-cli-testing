@@ -5,7 +5,7 @@ on:
 
 jobs:
   auth-tests:
-    runs-on: self-hosted-default
+    runs-on: self-hosted-amd64-medium-privileged-on-demand
     
     env:
       TEST_TYPE: hub_cli_auth
