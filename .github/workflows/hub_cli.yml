@@ -7,6 +7,11 @@ jobs:
   auth-tests:
     runs-on: self-hosted-default
     
+    env:
+      TEST_TYPE: hub_cli_auth
+      WORKFLOW_NAME: "Hub CLI Automation - ${{ github.workflow }}"
+      TRIGGER_TYPE: ${{ github.event_name }}
+    
     steps:
       - name: Import Secrets from Vault
         id: import-secrets
@@ -23,6 +28,7 @@ jobs:
             cloud/prod/data/Prod-Credentials Password | HUB_PASSWORD;
             cloud/prod/data/Prod-Credentials ANACONDA_API_BASE | ANACONDA_API_BASE;
             cloud/prod/data/Prod-Credentials ANACONDA_UI_BASE | ANACONDA_UI_BASE;
+            anaconda-server/testautomation/data/reportportal api_key | RP_API_KEY;
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -71,17 +77,32 @@ jobs:
         run: |
           mkdir -p test-results/videos
 
+      - name: Export ReportPortal metadata
+        shell: bash
+        run: |
+          WORKFLOW_SLUG=${WORKFLOW_NAME// /_}
+          echo "RP_LAUNCH=${WORKFLOW_NAME}"                                               >> "$GITHUB_ENV"
+          echo "RP_LAUNCH_DESCRIPTION=Test execution for ${TEST_TYPE} triggered by ${TRIGGER_TYPE}" >> "$GITHUB_ENV"
+          echo "RP_LAUNCH_ATTRIBUTES='test_type:${TEST_TYPE} workflow:${WORKFLOW_SLUG} trigger:${TRIGGER_TYPE}'" >> "$GITHUB_ENV"
+
       - name: Run Auth Tests
         shell: bash -el {0}
         continue-on-error: true
         run: |
+          WORKFLOW_SLUG=${WORKFLOW_NAME// /_}
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
             python -m pytest tests/ \
             -v \
             --tb=short \
             --junit-xml=test-results/junit.xml \
             --junit-prefix=auth \
-            --html=test-results/report.html
+            --html=test-results/report.html \
+            --reportportal \
+            --rp-launch="${WORKFLOW_NAME}" \
+            --rp-launch-description="Test execution for ${TEST_TYPE} triggered by ${TRIGGER_TYPE}" \
+            -o "rp_launch_attributes='test_type:${TEST_TYPE}','workflow:${WORKFLOW_SLUG}','trigger:${TRIGGER_TYPE}'" \
+            --rp-project="PSM" \
+            --rp-api-key="${RP_TOKEN}"
         env:
           PLAYWRIGHT_HEADLESS: "true"
           DISPLAY: ":99"
@@ -91,6 +112,10 @@ jobs:
           PYTHONIOENCODING: "utf-8"
           # Add timeout settings to prevent hanging processes
           PYTEST_TIMEOUT: "300"
+          RP_TOKEN: ${{ env.RP_API_KEY }}
+          WORKFLOW_NAME: ${{ env.WORKFLOW_NAME }}
+          TEST_TYPE: ${{ env.TEST_TYPE }}
+          TRIGGER_TYPE: ${{ env.TRIGGER_TYPE }}
 
       - name: Upload test artifacts
         uses: actions/upload-artifact@v4
