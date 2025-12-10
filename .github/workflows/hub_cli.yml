@@ -3,6 +3,10 @@ name: Hub CLI Auth Tests
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   auth-tests:
     runs-on: self-hosted-amd64-medium-privileged-on-demand
