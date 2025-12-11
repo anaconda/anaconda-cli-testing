@@ -54,7 +54,7 @@ jobs:
           
           # Install Python dependencies
           pip install -r requirements.txt
-          pip install pytest-playwright pytest-html
+          pip install pytest-playwright pytest-html pytest-reportportal
           playwright install chromium --with-deps
 
       - name: Create .env file
