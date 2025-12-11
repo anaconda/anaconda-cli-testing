@@ -6,6 +6,7 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: write
 
 jobs:
   auth-tests:
@@ -93,7 +94,7 @@ jobs:
             --rp-launch="${WORKFLOW_NAME}" \
             --rp-launch-description="Test execution for ${TEST_TYPE} triggered by ${TRIGGER_TYPE}" \
             -o "rp_launch_attributes='test_type:${TEST_TYPE}','workflow:${WORKFLOW_SLUG}','trigger:${TRIGGER_TYPE}'" \
-            --rp-project="PSM" \
+            --rp-project="AUTH-CLI" \
             --rp-api-key="${RP_TOKEN}"
         env:
           PLAYWRIGHT_HEADLESS: "true"
