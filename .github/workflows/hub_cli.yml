@@ -9,31 +9,19 @@ permissions:
 
 jobs:
   auth-tests:
-    runs-on: self-hosted-amd64-medium-privileged-on-demand
+    runs-on: ubuntu-latest
     
     env:
       TEST_TYPE: hub_cli_auth
       WORKFLOW_NAME: "Hub CLI Automation - ${{ github.workflow }}"
       TRIGGER_TYPE: ${{ github.event_name }}
+      HUB_EMAIL: ${{ secrets.EMAIL }}
+      HUB_PASSWORD: ${{ secrets.PASSWORD }}
+      ANACONDA_API_BASE: ${{ secrets.ANACONDA_API_BASE }}
+      ANACONDA_UI_BASE: ${{ secrets.ANACONDA_UI_BASE }}
+      RP_API_KEY: ${{ secrets.RP_API_KEY }}
     
     steps:
-      - name: Import Secrets from Vault
-        id: import-secrets
-        uses: hashicorp/vault-action@v3.0.0
-        with:
-          url: ${{ secrets.VAULT_ADDR }}
-          method: approle
-          path: approle-gha
-          roleId: ${{ secrets.VAULT_APPROLE_ROLE_ID }}
-          secretId: ${{ secrets.VAULT_APPROLE_SECRET_ID }}
-          namespace: admin
-          secrets: |
-            cloud/prod/data/Prod-Credentials Email | HUB_EMAIL;
-            cloud/prod/data/Prod-Credentials Password | HUB_PASSWORD;
-            cloud/prod/data/Prod-Credentials ANACONDA_API_BASE | ANACONDA_API_BASE;
-            cloud/prod/data/Prod-Credentials ANACONDA_UI_BASE | ANACONDA_UI_BASE;
-            anaconda-server/testautomation/data/reportportal api_key | RP_API_KEY;
-
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -116,7 +104,7 @@ jobs:
           PYTHONIOENCODING: "utf-8"
           # Add timeout settings to prevent hanging processes
           PYTEST_TIMEOUT: "300"
-          RP_TOKEN: ${{ env.RP_API_KEY }}
+          RP_TOKEN: ${{ secrets.RP_API_KEY }}
           WORKFLOW_NAME: ${{ env.WORKFLOW_NAME }}
           TEST_TYPE: ${{ env.TEST_TYPE }}
           TRIGGER_TYPE: ${{ env.TRIGGER_TYPE }}
