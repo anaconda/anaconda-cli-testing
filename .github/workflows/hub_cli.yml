@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      TEST_TYPE: hub_cli_auth
+      TEST_TYPE: Auth CLI Tests
       WORKFLOW_NAME: "Hub CLI Automation - ${{ github.workflow }}"
       TRIGGER_TYPE: ${{ github.event_name }}
       HUB_EMAIL: ${{ secrets.EMAIL }}
@@ -22,6 +22,7 @@ jobs:
       ANACONDA_API_BASE: ${{ secrets.ANACONDA_API_BASE }}
       ANACONDA_UI_BASE: ${{ secrets.ANACONDA_UI_BASE }}
       RP_API_KEY: ${{ secrets.RP_API_KEY }}
+      RP_ENDPOINT: ${{ secrets.RP_ENDPOINT }}
     
     steps:
       - name: Checkout code
@@ -75,7 +76,7 @@ jobs:
         shell: bash
         run: |
           WORKFLOW_SLUG=${WORKFLOW_NAME// /_}
-          echo "RP_LAUNCH=${WORKFLOW_NAME}"                                               >> "$GITHUB_ENV"
+          echo "RP_LAUNCH=${WORKFLOW_NAME}" >> "$GITHUB_ENV"
           echo "RP_LAUNCH_DESCRIPTION=Test execution for ${TEST_TYPE} triggered by ${TRIGGER_TYPE}" >> "$GITHUB_ENV"
           echo "RP_LAUNCH_ATTRIBUTES='test_type:${TEST_TYPE} workflow:${WORKFLOW_SLUG} trigger:${TRIGGER_TYPE}'" >> "$GITHUB_ENV"
 
