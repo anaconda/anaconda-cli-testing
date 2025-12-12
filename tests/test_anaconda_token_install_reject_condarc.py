@@ -178,7 +178,10 @@ def test_anaconda_token_install_reject_condarc(
         if token_proc.poll() is not None:
             remaining = token_proc.stdout.read()
             if remaining:
-                for line in remaining.decode('utf-8', errors='ignore').strip().split('\n'):
+                # Handle both bytes and string output (launch_subprocess uses text=True)
+                if isinstance(remaining, bytes):
+                    remaining = remaining.decode('utf-8', errors='ignore')
+                for line in remaining.strip().split('\n'):
                     if line.strip():
                         logger.info(f"[STDOUT final] {line.strip()}")
                         # Check for OAuth URL in remaining output

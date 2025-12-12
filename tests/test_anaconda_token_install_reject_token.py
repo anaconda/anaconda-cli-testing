@@ -29,11 +29,12 @@ from tests.test_anaconda_login import _capture_oauth_url_from_cli, _wait_for_cli
 CLI_STARTUP_DELAY = 0.5  # seconds to wait for CLI to start
 OUTPUT_READ_DELAY = 0.1  # seconds to wait when no output available
 DEFAULT_TIMEOUT_SECONDS = 5  # default timeout/delay value in seconds
-OAUTH_CALLBACK_DELAY = DEFAULT_TIMEOUT_SECONDS  # seconds to allow CLI to process OAuth callback
 TOKEN_SAVE_DELAY = 3  # seconds to wait for auth token to be saved
-PKG_KILL_TIMEOUT = DEFAULT_TIMEOUT_SECONDS  # seconds timeout for pkill command
 PROCESS_CLEANUP_DELAY = 1  # seconds to wait after killing processes
 CONDA_SEARCH_TIMEOUT = 30  # seconds timeout for conda search
+OAUTH_CALLBACK_DELAY = DEFAULT_TIMEOUT_SECONDS  # seconds to allow CLI to process OAuth callback
+PKG_KILL_TIMEOUT = DEFAULT_TIMEOUT_SECONDS  # seconds timeout for pkill command
+
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,10 @@ def test_anaconda_token_install_reject_token(
         if token_proc.poll() is not None:
             remaining = token_proc.stdout.read()
             if remaining:
-                for line in remaining.decode('utf-8', errors='ignore').strip().split('\n'):
+                # Handle both bytes and string output (launch_subprocess uses text=True)
+                if isinstance(remaining, bytes):
+                    remaining = remaining.decode('utf-8', errors='ignore')
+                for line in remaining.strip().split('\n'):
                     if line.strip():
                         logger.info(f"[STDOUT final] {line.strip()}")
                         # Check for OAuth URL in remaining output
