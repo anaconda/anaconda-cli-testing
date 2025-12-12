@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      TEST_TYPE: Auth CLI Tests
-      WORKFLOW_NAME: "Hub CLI Automation - ${{ github.workflow }}"
+      TEST_TYPE: auth_cli_tests
+      WORKFLOW_NAME: "Auth CLI Tests - ${{ github.workflow }}"
       TRIGGER_TYPE: ${{ github.event_name }}
       HUB_EMAIL: ${{ secrets.EMAIL }}
       HUB_PASSWORD: ${{ secrets.PASSWORD }}
