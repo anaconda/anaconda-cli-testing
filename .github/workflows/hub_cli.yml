@@ -15,7 +15,7 @@ jobs:
     
     env:
       TEST_TYPE: auth_cli_tests
-      WORKFLOW_NAME: "Auth CLI Tests - ${{ github.workflow }}"
+      WORKFLOW_NAME: "Auth CLI Tests"
       TRIGGER_TYPE: ${{ github.event_name }}
       HUB_EMAIL: ${{ secrets.EMAIL }}
       HUB_PASSWORD: ${{ secrets.PASSWORD }}
