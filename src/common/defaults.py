@@ -2,8 +2,8 @@
 # ─── Constants for anaconda‐auth testing ───────────────────────────────
 PACKAGE_NAME              = "anaconda-auth"     # the conda package name
 CLI_SUBCOMMAND            = "anaconda auth"     # what you actually run on the CLI
-ANACONDA_AUTH_VERSION     = "0.11.0"             # what we expect for --version/-V
-CONDA_VERSION             = "25.5.1"            # conda version to test against
+ANACONDA_AUTH_VERSION     = "0.12.1"             # what we expect for --version/-V
+CONDA_VERSION             = "25.11.0"            # conda version to test against
 
 # ─── Conda Installation ──────────────────────────────────────────────
 LINUX_INSTALLER_URL       = "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
