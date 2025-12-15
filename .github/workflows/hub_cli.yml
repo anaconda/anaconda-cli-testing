@@ -12,7 +12,7 @@ permissions:
 jobs:
   auth-tests:
     runs-on: ubuntu-latest
-    
+
     env:
       TEST_TYPE: auth_cli_tests
       WORKFLOW_NAME: "Auth CLI Tests"
@@ -24,7 +24,7 @@ jobs:
       RP_API_KEY: ${{ secrets.RP_API_KEY }}
       RP_CF_ACCESS_CLIENT_ID: ${{ secrets.REPORTPORTAL_CF_ACCESS_CLIENT_ID }}
       RP_CF_ACCESS_CLIENT_SECRET: ${{ secrets.REPORTPORTAL_CF_ACCESS_CLIENT_SECRET }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,17 +43,17 @@ jobs:
         run: |
           # Install anaconda-auth and conda-build via conda
           conda install -y anaconda-auth conda-build
-          
+
           # Configure conda - ensure clean channel setup
           rm -f ~/.condarc
           rm -f ~/.local/conda/.condarc
           conda config --add channels defaults
           conda config --set channel_priority strict
-          
+
           # Install system dependencies for headless browser
           sudo apt-get update
           sudo apt-get install -y xvfb
-          
+
           # Install Python dependencies
           pip install -r requirements.txt
           pip install pytest-playwright pytest-html pytest-reportportal

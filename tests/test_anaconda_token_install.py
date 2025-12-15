@@ -512,7 +512,7 @@ def _run_conda_search(env):
         tuple: (search_proc, search_output, stderr_output)
     """
     logger.info(f"\nRunning conda search {SEARCH_PACKAGE} to verify channel configuration...")
-    search_proc = launch_subprocess(["conda", "search", SEARCH_PACKAGE], env)
+    search_proc = launch_subprocess(["conda", "search", "-c", "defaults", SEARCH_PACKAGE], env)
     search_output, stderr_output = search_proc.communicate(timeout=CONDA_SEARCH_TIMEOUT)
     
     # Handle case where output might be None

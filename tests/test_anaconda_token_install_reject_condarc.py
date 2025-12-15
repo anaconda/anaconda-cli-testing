@@ -243,7 +243,7 @@ def test_anaconda_token_install_reject_condarc(
     # Verify conda search shows default channels
     logger.info(f"\nRunning conda search {SEARCH_PACKAGE} to verify default channel configuration...")
 
-    search_result = run_cli_command(f"conda search {SEARCH_PACKAGE}", extra_env={"HOME": str(clean_home)})
+    search_result = run_cli_command(f"conda search -c defaults {SEARCH_PACKAGE}", extra_env={"HOME": str(clean_home)})
 
     logger.info(f"Conda search exit code: {search_result.returncode}")
 
