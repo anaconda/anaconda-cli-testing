@@ -238,7 +238,7 @@ def test_anaconda_token_install_reject_token(
 
     # Verify conda search shows default channels
     logger.info(f"\nRunning conda search {SEARCH_PACKAGE} to verify default channel configuration...")
-    search_proc = launch_subprocess(["conda", "search", SEARCH_PACKAGE], env)
+    search_proc = launch_subprocess(["conda", "search", "-c", "defaults", SEARCH_PACKAGE], env)
     search_output, _ = search_proc.communicate(timeout=CONDA_SEARCH_TIMEOUT)
 
     if search_proc.returncode != 0:
