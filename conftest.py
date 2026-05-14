@@ -187,6 +187,145 @@ def cli_runner(free_port, pw_open_script, tmp_path):
     return _run
 
 
+# ─── 9b) cli_login fixture - complete login flow ───────────────
+@pytest.fixture
+def cli_login(free_port, pw_open_script, tmp_path, page, api_request_context, credentials):
+    """
+    Complete CLI login flow:
+     1. Start `anaconda auth login` CLI
+     2. Capture OAuth URL from CLI output
+     3. Complete OAuth via browser (API + redirect)
+     4. Wait for CLI success message
+
+    Returns dict with: proc, port, clean_home, oauth_url, success (bool)
+    """
+    from src.common.defaults import (
+        URL_PATTERNS,
+        OAUTH_CAPTURE_TIMEOUT,
+        CLI_COMPLETION_TIME,
+        PAGE_LOAD_TIMEOUT,
+        NETWORK_IDLE_TIMEOUT,
+    )
+
+    def _login():
+        clean_home = tmp_path / "clean_home"
+        clean_home.mkdir(exist_ok=True)
+
+        env = os.environ.copy()
+        env["HOME"] = str(clean_home)
+        env["BROWSER"] = str(pw_open_script)
+        env["ANACONDA_OAUTH_CALLBACK_PORT"] = str(free_port)
+        env["ANACONDA_AUTH_API_KEY"] = ""
+
+        # Kill any stray login processes
+        try:
+            subprocess.run(
+                ["pkill", "-f", "anaconda.*auth.*login"],
+                capture_output=True,
+                timeout=5
+            )
+            time.sleep(0.5)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        # Start CLI login process
+        proc = subprocess.Popen(
+            ["anaconda", "auth", "login"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        logger.info(f"CLI login started, PID: {proc.pid}, port: {free_port}")
+
+        # Capture OAuth URL from CLI output
+        oauth_url = None
+        start_time = time.time()
+        while time.time() - start_time < OAUTH_CAPTURE_TIMEOUT:
+            if proc.poll() is not None:
+                break
+            line = proc.stdout.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            line = line.strip()
+            if line:
+                logger.info(f"[CLI] {line}")
+            matches = re.findall(r"https?://[^\s\)]+", line)
+            for u in matches:
+                if URL_PATTERNS["oauth"] in u:
+                    oauth_url = u
+                    logger.info(f"Captured OAuth URL: {oauth_url}")
+                    break
+            if oauth_url:
+                break
+
+        if not oauth_url:
+            logger.error("Failed to capture OAuth URL from CLI")
+            proc.terminate()
+            return {"proc": proc, "port": free_port, "clean_home": str(clean_home),
+                    "oauth_url": None, "success": False}
+
+        # Complete OAuth in browser
+        try:
+            page.goto(oauth_url, timeout=PAGE_LOAD_TIMEOUT, wait_until="domcontentloaded")
+            page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
+
+            # Extract state from URL
+            url_state = urllib.parse.parse_qs(
+                urllib.parse.urlparse(page.url).query
+            ).get("state", [""])[0]
+
+            if not url_state:
+                url_state = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(oauth_url).query
+                ).get("state", [""])[0]
+
+            if url_state:
+                # Perform API login
+                res = api_request_context.post(
+                    f"/api/auth/login/password/{url_state}",
+                    data=credentials
+                )
+                if res.ok and res.json().get("redirect"):
+                    redirect_url = res.json()["redirect"]
+                    logger.info(f"Following redirect: {redirect_url}")
+                    page.goto(redirect_url, timeout=PAGE_LOAD_TIMEOUT)
+                    page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
+        except Exception as e:
+            logger.error(f"OAuth browser flow failed: {e}")
+            proc.terminate()
+            return {"proc": proc, "port": free_port, "clean_home": str(clean_home),
+                    "oauth_url": oauth_url, "success": False}
+
+        # Wait for CLI to complete and check for success
+        success = False
+        start_time = time.time()
+        while time.time() - start_time < CLI_COMPLETION_TIME:
+            if proc.poll() is not None:
+                break
+            line = proc.stdout.readline()
+            if line:
+                line = line.strip()
+                logger.info(f"[CLI] {line}")
+                if "success" in line.lower() or "logged in" in line.lower():
+                    success = True
+                    break
+            time.sleep(0.1)
+
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+        return {"proc": proc, "port": free_port, "clean_home": str(clean_home),
+                "oauth_url": oauth_url, "success": success}
+
+    return _login
+
+
 # ─── 10) run_cli_command fixture (supports extra_env) ──────────
 @pytest.fixture
 def run_cli_command():

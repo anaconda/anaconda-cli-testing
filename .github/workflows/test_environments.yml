@@ -1,0 +1,131 @@
+name: Cloud CLI Environments Tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  environments-tests:
+    runs-on: ubuntu-latest
+
+    env:
+      TEST_TYPE: environments_cli_tests
+      WORKFLOW_NAME: "Environments CLI Tests"
+      TRIGGER_TYPE: ${{ github.event_name }}
+      HUB_EMAIL: ${{ secrets.EMAIL }}
+      HUB_PASSWORD: ${{ secrets.PASSWORD }}
+      ANACONDA_API_BASE: ${{ secrets.ANACONDA_API_BASE }}
+      ANACONDA_UI_BASE: ${{ secrets.ANACONDA_UI_BASE }}
+      RP_API_KEY: ${{ secrets.RP_API_KEY }}
+      RP_CF_ACCESS_CLIENT_ID: ${{ secrets.REPORTPORTAL_CF_ACCESS_CLIENT_ID }}
+      RP_CF_ACCESS_CLIENT_SECRET: ${{ secrets.REPORTPORTAL_CF_ACCESS_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.12'
+          auto-update-conda: true
+          activate-environment: test-env
+          channels: conda-forge,anaconda,defaults
+          conda-remove-defaults: false
+
+      - name: Install dependencies and setup environment
+        shell: bash -el {0}
+        run: |
+          # Install anaconda-auth and anaconda-env-manager in base environment
+          conda install --name base -y anaconda-cloud::anaconda-auth anaconda-cloud::anaconda-env-manager
+
+          # Install system dependencies for headless browser
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+          # Install Python dependencies
+          pip install -r requirements.txt
+          pip install pytest-playwright pytest-html pytest-reportportal
+          playwright install chromium --with-deps
+
+      - name: Create .env file
+        run: |
+          mkdir -p tests
+          cat > tests/.env << EOF
+          ANACONDA_API_BASE=${{ env.ANACONDA_API_BASE }}
+          ANACONDA_UI_BASE=${{ env.ANACONDA_UI_BASE }}
+          HUB_EMAIL=${{ env.HUB_EMAIL }}
+          HUB_PASSWORD=${{ env.HUB_PASSWORD }}
+          EOF
+
+      - name: Setup test directories
+        run: |
+          mkdir -p test-results/videos
+
+      - name: Export ReportPortal metadata
+        shell: bash
+        run: |
+          WORKFLOW_SLUG=${WORKFLOW_NAME// /_}
+          echo "RP_LAUNCH=${WORKFLOW_NAME}" >> "$GITHUB_ENV"
+          echo "RP_LAUNCH_DESCRIPTION=Test execution for ${TEST_TYPE} triggered by ${TRIGGER_TYPE}" >> "$GITHUB_ENV"
+          echo "RP_LAUNCH_ATTRIBUTES='test_type:${TEST_TYPE} workflow:${WORKFLOW_SLUG} trigger:${TRIGGER_TYPE}'" >> "$GITHUB_ENV"
+
+      - name: Run Environments Tests
+        shell: bash -el {0}
+        continue-on-error: true
+        run: |
+          WORKFLOW_SLUG=${WORKFLOW_NAME// /_}
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+            python run_pytest_with_cf.py tests/ \
+            -v \
+            -m environments \
+            --tb=short \
+            --junit-xml=test-results/junit.xml \
+            --junit-prefix=environments \
+            --html=test-results/report.html \
+            --reportportal \
+            --rp-endpoint="https://reportportal-dev.anacondaconnect.com" \
+            --rp-api-key="${RP_API_KEY}" \
+            --rp-project="AUTH-CLI" \
+            --rp-launch="${WORKFLOW_NAME}" \
+            --rp-launch-description="Test execution for ${TEST_TYPE} triggered by ${TRIGGER_TYPE}" \
+            -o "rp_launch_attributes='test_type:${TEST_TYPE}','workflow:${WORKFLOW_SLUG}','trigger:${TRIGGER_TYPE}'"
+        env:
+          PLAYWRIGHT_HEADLESS: "true"
+          DISPLAY: ":99"
+          NO_COLOR: "1"
+          TERM: "dumb"
+          PYTHONUNBUFFERED: "1"
+          PYTHONIOENCODING: "utf-8"
+          PYTEST_TIMEOUT: "300"
+          RP_API_KEY: ${{ env.RP_API_KEY }}
+          RP_CF_ACCESS_CLIENT_ID: ${{ env.RP_CF_ACCESS_CLIENT_ID }}
+          RP_CF_ACCESS_CLIENT_SECRET: ${{ env.RP_CF_ACCESS_CLIENT_SECRET }}
+          WORKFLOW_NAME: ${{ env.WORKFLOW_NAME }}
+          TEST_TYPE: ${{ env.TEST_TYPE }}
+          TRIGGER_TYPE: ${{ env.TRIGGER_TYPE }}
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-artifacts
+          path: |
+            test-results/junit.xml
+            test-results/report.html
+            test-results/videos/
+          if-no-files-found: ignore
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            test-results/junit.xml
+          check_name: Environments Test Results
+          comment_mode: always
